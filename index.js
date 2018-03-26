@@ -1,26 +1,13 @@
 const { IncomingWebhook, RTMClient, WebClient } = require('@slack/client');
-// import SlackBot from 'slackbots';
-//
-// const bot = new SlackBot({
-//   token: process.env.BOT_SLACK_TOKEN,
-//   name: 'bubbabuddy'
-// });
-//
-// bot.on('start', function() {
-//   var params = {
-//        icon_emoji: ':cat:'
-//    };
-//
-//    // define channel, where bot exist. You can adjust it there https://my.slack.com/services
-//    bot.postMessageToChannel('schedulebuddy', 'meow!', params);
-//
-// });
 
 /*
 * RTM API to be used to respond to messages ?
 */
 const rtm = new RTMClient(process.env.BOT_SLACK_TOKEN);
 rtm.start();
+// TODO: @Chris or @Trevor use this package to integrate with APIAI
+// const apiai = require('apiai');
+// const app = apiai(process.env.APIAI_CLIENT_TOKEN);
 
 /*
 * Web API to be used to parse through messages ?
@@ -30,6 +17,13 @@ rtm.start();
 /* WEBHOOK needed to communicate with slack server and slack server to our app */
 const currentTime = new Date().toTimeString();
 
+rtm.on('hello', (event) => {
+  console.log(event.type);
+});
+
+rtm.on('presence_change', (event) => {
+    console.log(event);
+})
 
 rtm.on('message', (event) => {
   // For structure of `event`, see https://api.slack.com/events/reaction_added
