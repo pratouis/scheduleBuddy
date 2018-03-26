@@ -1,0 +1,28 @@
+{
+  "name": "schedulebuddy",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "babel-node index.js --presets es2015,stage-2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ChrisRaveendra/scheduleBuddy.git"
+  },
+  "author": "manzt, chrisraveendra, pratouis, aliksoyupak",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ChrisRaveendra/scheduleBuddy/issues"
+  },
+  "homepage": "https://github.com/ChrisRaveendra/scheduleBuddy#readme",
+  "dependencies": {
+    "@slack/client": "^4.1.0",
+    "google-auth-library": "^0.12.0"
+  },
+  "devDependencies": {
+    "babel-cli": "^6.26.0",
+    "babel-preset-es2015": "^6.24.1",
+    "babel-preset-stage-2": "^6.24.1"
+  }
+}
