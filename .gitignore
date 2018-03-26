@@ -1,5 +1,9 @@
-.DS_Store
+node_modules
+out
+.eslintcache
 env.sh
+.DS_Store
+
 # Logs
 logs
 *.log
