@@ -18,7 +18,8 @@
   "homepage": "https://github.com/ChrisRaveendra/scheduleBuddy#readme",
   "dependencies": {
     "@slack/client": "^4.1.0",
-    "google-auth-library": "^0.12.0"
+    "google-auth-library": "^0.12.0",
+    "slackbots": "^1.1.0"
   },
   "devDependencies": {
     "babel-cli": "^6.26.0",
