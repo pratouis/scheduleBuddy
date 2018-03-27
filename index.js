@@ -27,13 +27,13 @@ rtm.start();
 /*
 * Web API to be used to parse through messages ?
 */
-// const web = new WebClient(process.env.SLACK_TOKEN);
+const web = new WebClient(process.env.SLACK_TOKEN);
 
 /* WEBHOOK needed to communicate with slack server and slack server to our app */
 const currentTime = new Date().toTimeString();
 
 const defaultResponse = {
-  reply_broadcast: true
+  reply_broadcast: true,
 }
 
 
@@ -42,10 +42,21 @@ const defaultResponse = {
 1) database
 2)
 */
-
+rtm.on('message::bot_message', async(event) => {
+  console.log('event from bot_message', event);
+})
 
 rtm.on('message', async (event) => {
   // For structure of `event`, see https://api.slack.com/events/reaction_added
+  // console.log(event);
+  const { message } = event;
+
+  if ( !message || !message.subtype || (message.subtype && message.subtype === 'bot_message') ||
+       (!message.subtype && message.user === rtm.activeUserId) ) {
+    return;
+  }
+
+  // if(event.user == 'U9X9V0894') return;
   try {
     const user_email = await getUserEmailByID(event.user);
     if(typeof user_email !== "string") {
@@ -56,10 +67,14 @@ rtm.on('message', async (event) => {
     const response = Object.assign({}, defaultResponse, {channel: event.channel});
     if(! user.googleCalAuth) {
       response.text = `I need your permission to access google calendar: ${generateAuthCB(event.user)}`;
-      let res = await rtm.addOutgoingEvent(true, 'message', response);
+      // let res = await rtm.addOutgoingEvent(true, 'message', response);
+      let res = await web.chat.postMessage({ channel: event.channel, text: response.text })
+      console.log('sent in ', res.ts);
     } else {
       response.text = 'hi hello';
-      let success = await rtm.addOutgoingEvent(true, 'message', response)
+      // let success = await rtm.addOutgoingEvent(true, 'message', response)
+      let success = web.chat.postMessage({ channel: event.channel, text: response.text })
+      .then(res => console.log(res)).catch(err => err)
       console.log('Message sent: ', success.ts);
     }
   } catch (err) {
