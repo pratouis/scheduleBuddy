@@ -2,8 +2,9 @@ import mongoose from 'mongoose';
 const express = require('express');
 import { User } from './models/models';
 const { RTMClient, WebClient } = require('@slack/client');
-import { generateAuthCB, googleRoutes } from './google';
+import { generateAuthCB, googleRoutes, getEvents } from './google';
 import { getUserEmailByID } from './routes';
+import axios from 'axios';
 const app = express();
 app.use('/', googleRoutes);
 
@@ -47,33 +48,39 @@ const defaultResponse = {
 
 rtm.on('message', async (event) => {
   // For structure of `event`, see https://api.slack.com/events/reaction_added
-  // console.log(event);
+  console.log('event: ', event);
   let { message } = event;
   if(!message){ message = event; }
+  if(message !== event) console.log('message: ', message);
   if ((message.subtype && message.subtype === 'bot_message') ||
        (!message.subtype && message.user === rtm.activeUserId) ) {
+         console.log('returning because of subtype');
     return;
   }
 
+  console.log('not returning');
   // if(event.user == 'U9X9V0894') return;
   try {
     const user_email = await getUserEmailByID(event.user);
+    console.log(user_email);
     if(typeof user_email !== "string") {
       throw `invalid email: type is ${typeof user_email}`;
     }
-    // TODO @backend let's look at associating google calendar oauth with slack acct
     let user = await User.findOrCreate(event.user, user_email);
+    console.log('user inside rtm.on(message): ', user);
     const response = Object.assign({}, defaultResponse, {channel: event.channel});
     if(! user.googleCalAuth)
     {
       response.text = `I need your permission to access google calendar: ${generateAuthCB(event.user)}`;
-      // let res = await rtm.addOutgoingEvent(true, 'message', response);
-      let res = await web.chat.postMessage({ channel: event.channel, text: response.text })
-      console.log('sent in ', res.ts);
+      let res = rtm.addOutgoingEvent(false, 'message', response);
+      // let res = await web.chat.postMessage({ channel: event.channel, text: response.text, subtype: 'bot_message' })
+      // console.log('auth request sent in ', res.ts);
     } else {
       response.text = 'hi hello';
+      getEvents(event.user);
+
       // let success = await rtm.addOutgoingEvent(true, 'message', response)
-      let success = await web.chat.postMessage({ channel: event.channel, text: response.text })
+      let success = await web.chat.postMessage({ channel: event.channel, text: response.text, subtype: 'bot_message' })
       console.log('Message sent: ', success.ts);
     }
   } catch (err) {
@@ -86,14 +93,7 @@ rtm.on('message', async (event) => {
   // using email
 });
 
-/*
-* helper function that asks user for authentication
-*/
-const handleAuth = async (channel, slackID) => {
-  const response = Object.assign({}, defaultResponse, channel,
-  { text: `I need your permission to access google calendar: ${generateAuthCB(slackID)}` });
-  return await rtm.addOutgoingEvent(true, 'message', response);
-}
+
 
 /*
 * listen here
