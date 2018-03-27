@@ -14,7 +14,7 @@ import { User } from './models/models';
 
 const CLIENT_ID = keys.client_id;
 const CLIENT_SECRET = keys.client_secret;
-const REDIRECT_URL = keys.redirect_uris[0];
+const REDIRECT_URL = "/oauthcb";
 
 const oauth2Client = new OAuth2Client(CLIENT_ID,
   CLIENT_SECRET, REDIRECT_URL);
@@ -33,7 +33,7 @@ const generateAuthCB = (slackID) => {
     access_type: 'offline', // will return a refresh token
     scope: 'https://www.googleapis.com/auth/calendar', // can be a space-delimited string or an array of scopes
     redirect_uri: `http://localhost:3000/${REDIRECT_URL}`,
-    state: slackID, // state is a query param passed to redirect_uri
+    state: slackID, // state is a query param passed to redirect_uri,
   })
 }
 
@@ -68,6 +68,7 @@ router.get(REDIRECT_URL, async (req, res) => {
 const getEvents = async (slackID) => {
   try {
     console.log('inside getEvents');
+    console.log(CLIENT_ID, CLIENT_SECRET, REDIRECT_URL)
     let user = await User.findOne({ slackID: slackID });
     console.log(user);
     oauth2Client.setCredentials(user.googleCalAuth);

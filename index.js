@@ -80,8 +80,8 @@ rtm.on('message', async (event) => {
       getEvents(event.user);
 
       // let success = await rtm.addOutgoingEvent(true, 'message', response)
-      let success = await web.chat.postMessage({ channel: event.channel, text: response.text, subtype: 'bot_message' })
-      console.log('Message sent: ', success.ts);
+      // let success = await web.chat.postMessage({ channel: event.channel, text: response.text, subtype: 'bot_message' })
+      // console.log('Message sent: ', success.ts);
     }
   } catch (err) {
     console.error(err);
