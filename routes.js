@@ -1,5 +1,6 @@
-// import express from 'express';
-// const router = new express.Router();
+/*
+* This file is for requests made to SLACK API
+*/
 import axios from 'axios';
 
 const getUserEmailByID = (userID) => {

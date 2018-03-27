@@ -1,3 +1,7 @@
+/*
+* This file is for interacting with google calendar
+*/
+
 'use strict';
 import { google } from 'googleapis';
 const OAuth2Client = google.auth.OAuth2;
@@ -28,7 +32,7 @@ const generateAuthCB = (slackID) => {
   return oauth2Client.generateAuthUrl({
     access_type: 'offline', // will return a refresh token
     scope: 'https://www.googleapis.com/auth/calendar', // can be a space-delimited string or an array of scopes
-    redirect_uri: `http://localhost:3000${REDIRECT_URL}`,
+    redirect_uri: `http://localhost:3000/oauthcb`,
     state: slackID, // state is a query param passed to redirect_uri
   })
 }
@@ -42,14 +46,15 @@ const hashCal = (gCalAUTH) => {
   return hash.digest('hex');
 }
 
-router.get(REDIRECT_URL, async (req, res) => {
+router.get('/oauthcb', async (req, res) => {
   console.log('inside router')
   // TODO import express BODY PARSER
     try {
       // let slackID = req.query.state;
+      console.log(req.query.code);
       let user = await User.findOneAndUpdate(
         { slackID: req.query.state },
-        { "googleCalAuth": req.query.code },
+        { $set: { "googleCalAuth": req.query.code } },
         { returnNewDocument: true }
       );
       console.log(user);
@@ -59,6 +64,9 @@ router.get(REDIRECT_URL, async (req, res) => {
       res.status(500).send(err);
     }
 });
+
+// TODO set reminder
+// TODO set meeting
 
 // app.get('/', (req, res) => {
 //   if (!auth) {
