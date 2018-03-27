@@ -5,16 +5,16 @@
 'use strict';
 import { google } from 'googleapis';
 const OAuth2Client = google.auth.OAuth2;
-const keys = require('./client_secret.json').installed;
+// const keys = require('./client_secret.json').installed;
 const express = require('express');
 const router = new express.Router();
 import crypto from 'crypto';
 
 import { User } from './models/models';
 
-const CLIENT_ID = keys.client_id;
-const CLIENT_SECRET = keys.client_secret;
-const REDIRECT_URL = keys.redirect_uris[0];
+// const CLIENT_ID = keys.client_id;
+// const CLIENT_SECRET = keys.client_secret;
+// const REDIRECT_URL = keys.redirect_uris[0];
 
 const oauth2Client = new OAuth2Client(process.env.GOOGLE_CAL_CLIENT_ID,
   process.env.GOOGLE_CAL_SECRET, "/oauthcb");

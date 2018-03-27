@@ -5,8 +5,8 @@
 * @param {Object} res Cloud Function response context.
 */
 exports.scheduleBuddy = function scheduleBuddy(req, res) {
-    response = "This is a sample response from your webhook!" //Default response from the webhook to show it's working
-
+    // response = "This is a sample response from your webhook!" //Default response from the webhook to show it's working
+    response = "I've successfully updated your calendar!"
 
     res.setHeader('Content-Type', 'application/json'); //Requires application/json MIME type
     res.send(JSON.stringify({

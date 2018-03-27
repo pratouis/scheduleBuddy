@@ -58,6 +58,8 @@ rtm.on('message', async (event) => {
       response.text = `I need your permission to access google calendar: ${generateAuthCB(event.user)}`;
       let res = await rtm.addOutgoingEvent(true, 'message', response);
     } else {
+      // console.log(event.text);
+      console.log(event);
       response.text = 'hi hello';
       let success = await rtm.addOutgoingEvent(true, 'message', response)
       console.log('Message sent: ', success.ts);
