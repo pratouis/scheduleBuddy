@@ -12,7 +12,8 @@ const userSchema = mongoose.Schema({
   },
   googleCalAuth: {
     type: String,
-    default: ''
+    required: true,
+    default: ""
   },
   name: {
     type: String
