@@ -34,6 +34,7 @@ const currentTime = new Date().toTimeString();
 
 const defaultResponse = {
   reply_broadcast: true,
+  subtype: 'bot_message',
 }
 
 
@@ -42,16 +43,14 @@ const defaultResponse = {
 1) database
 2)
 */
-rtm.on('message::bot_message', async(event) => {
-  console.log('event from bot_message', event);
-})
+
 
 rtm.on('message', async (event) => {
   // For structure of `event`, see https://api.slack.com/events/reaction_added
   // console.log(event);
-  const { message } = event;
-
-  if ( !message || !message.subtype || (message.subtype && message.subtype === 'bot_message') ||
+  let { message } = event;
+  if(!message){ message = event; }
+  if ((message.subtype && message.subtype === 'bot_message') ||
        (!message.subtype && message.user === rtm.activeUserId) ) {
     return;
   }
@@ -60,12 +59,13 @@ rtm.on('message', async (event) => {
   try {
     const user_email = await getUserEmailByID(event.user);
     if(typeof user_email !== "string") {
-      throw `no bueno, user_email is typeof ${typeof user_email}`;
+      throw `invalid email: type is ${typeof user_email}`;
     }
     // TODO @backend let's look at associating google calendar oauth with slack acct
     let user = await User.findOrCreate(event.user, user_email);
     const response = Object.assign({}, defaultResponse, {channel: event.channel});
-    if(! user.googleCalAuth) {
+    if(! user.googleCalAuth)
+    {
       response.text = `I need your permission to access google calendar: ${generateAuthCB(event.user)}`;
       // let res = await rtm.addOutgoingEvent(true, 'message', response);
       let res = await web.chat.postMessage({ channel: event.channel, text: response.text })
@@ -73,8 +73,7 @@ rtm.on('message', async (event) => {
     } else {
       response.text = 'hi hello';
       // let success = await rtm.addOutgoingEvent(true, 'message', response)
-      let success = web.chat.postMessage({ channel: event.channel, text: response.text })
-      .then(res => console.log(res)).catch(err => err)
+      let success = await web.chat.postMessage({ channel: event.channel, text: response.text })
       console.log('Message sent: ', success.ts);
     }
   } catch (err) {
@@ -90,9 +89,9 @@ rtm.on('message', async (event) => {
 /*
 * helper function that asks user for authentication
 */
-const handleAuth = async (channel) => {
+const handleAuth = async (channel, slackID) => {
   const response = Object.assign({}, defaultResponse, channel,
-  { text: `I need your permission to access google calendar: ${REDIRECT_URL}` });
+  { text: `I need your permission to access google calendar: ${generateAuthCB(slackID)}` });
   return await rtm.addOutgoingEvent(true, 'message', response);
 }
 
