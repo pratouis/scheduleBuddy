@@ -13,11 +13,20 @@ const CLIENT_SECRET = keys.client_secret;
 const REDIRECT_URL = keys.redirect_uris[0];
 
 const oauth2Client = new OAuth2Client(CLIENT_ID, CLIENT_SECRET, REDIRECT_URL);
-const url = oauth2Client.generateAuthUrl({
-  access_type: 'offline', // will return a refresh token
-  scope: 'https://www.googleapis.com/auth/calendar', // can be a space-delimited string or an array of scopes
-  redirect_uri: `http://localhost:3000${REDIRECT_URL}`,
-});
+// const url = oauth2Client.generateAuthUrl({
+//   access_type: 'offline', // will return a refresh token
+//   scope: 'https://www.googleapis.com/auth/calendar', // can be a space-delimited string or an array of scopes
+//   redirect_uri: `http://localhost:3000${REDIRECT_URL}`,
+// });
+
+const generateAuthCB = (slackID) => {
+  return oauth2Client.generateAuthUrl({
+    access_type: 'offline', // will return a refresh token
+    scope: 'https://www.googleapis.com/auth/calendar', // can be a space-delimited string or an array of scopes
+    redirect_uri: `http://localhost:3000${REDIRECT_URL}`,
+    slackID: slackID
+  })
+}
 
 const hashCal = (gCalAUTH) => {
   const hash = crypto.createHash('md5');
@@ -26,10 +35,12 @@ const hashCal = (gCalAUTH) => {
 }
 
 router.get(REDIRECT_URL, async (req, res) => {
+  console.log('inside router')
+  // TODO import express BODY PARSER
     try {
       let slackID = req.query.state;
       let code = req.query.code;
-      console.log()
+      console.log(slackID, code, req.query);
     } catch (err) {
       console.log('error in updating user: ', err);
       res.status(500).send(err);
@@ -72,6 +83,6 @@ router.get(REDIRECT_URL, async (req, res) => {
 // }
 
 module.exports = {
-  google: router,
-  url: url
+  googleRoutes: router,
+  generateAuthCB: generateAuthCB
 };

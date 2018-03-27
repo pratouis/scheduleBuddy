@@ -2,9 +2,10 @@ import mongoose from 'mongoose';
 const express = require('express');
 import { User } from './models/models';
 const { RTMClient, WebClient } = require('@slack/client');
-import { url, router } from './google';
-
+import { generateAuthCB, googleRoutes } from './google';
+import { getUserEmailByID } from './routes';
 const app = express();
+app.use('/', googleRoutes);
 
 if (!process.env.MONGODB_URI) {
   console.error('Cannot find MONGODB_URI.  Run env.sh?');
@@ -53,42 +54,43 @@ rtm.on('message', async (event) => {
   //   new: true,
   //   upsert: true
   // });
-  let user = await User.findOrCreate
-
+  console.log('received message: ', event);
+  try {
+    const user_email = await getUserEmailByID(event.user);
+    if(typeof user_email !== "string") {
+      throw `no bueno, user_email is typeof ${typeof user_email}`;
+    }
+    console.log(user_email, event);
+    // TODO @backend let's look at associating google calendar oauth with slack acct
+    let user = await User.findOrCreate(event.user, user_email);
+    const response = Object.assign({}, defaultResponse, {channel: event.channel});
+    if(! user.googleCalAuth) {
+      response.text = `I need your permission to access google calendar: ${generateAuthCB(event.user)}`;
+      let res = await rtm.addOutgoingEvent(true, 'message', response);
+      console.log(res);
+      // let authorization = handleAuth(event.channel)
+    } else {
+      response.text = 'hi hello';
+      let success = await rtm.addOutgoingEvent(true, 'message', response)
+      console.log('Message sent: ', success.ts);
+    }
+  } catch (err) {
+    console.error(err);
+  }
   // console.log(event.user);
   // TODO send @param user_msg to dialogflow to get intent/query/whatever
-  const user_msg = event.text;
+  // const user_msg = event.text;
   // TODO query calendar API to see if we have access to modify calendar
   // using email
-  const user_email = getUserEmailByID(event.user);
-  if(typeof user_email !== "string"){
-    console.log('no bueno, got error');
-    rtm.addOutgoingEvent(true, 'mess')
-  }
-  // TODO @backend let's look at associating google calendar oauth with slack acct
-
-  const response = {
-    text: 'hi hello',
-    channel: event.channel,
-    reply_broadcast: true
-  }
-
-  rtm.addOutgoingEvent(true, 'message', response)
-  .then((success) => {
-    // `res` contains information about the posted message
-    console.log(success);
-    console.log('Message sent: ', success.ts);
-  })
-  .catch(console.error);
 });
 
 /*
 * helper function that asks user for authentication
 */
-const handleAuth = (channel) => {
+const handleAuth = async (channel) => {
   const response = Object.assign({}, defaultResponse, channel,
-  { text: 'I need your permission to access google calendar: ' });
-  rtm.addOutgoingEvent(true, 'message', response);
+  { text: `I need your permission to access google calendar: ${REDIRECT_URL}` });
+  return await rtm.addOutgoingEvent(true, 'message', response);
 }
 
 /*

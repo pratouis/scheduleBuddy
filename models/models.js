@@ -19,6 +19,14 @@ const userSchema = mongoose.Schema({
   }
 });
 
+userSchema.statics.findOrCreate = function (slackID, email) {
+  return this.findOneAndUpdate(
+    { slackID: slackID },
+    { $setOnInsert: { email: email } },
+    { upsert: true, new: true }
+  ).exec()
+}
+
 
 module.exports = {
   User: mongoose.model('User', userSchema)
