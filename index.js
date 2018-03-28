@@ -48,28 +48,22 @@ const defaultResponse = {
 
 rtm.on('message', async (event) => {
   // For structure of `event`, see https://api.slack.com/events/reaction_added
-  console.log('event: ', event);
   let { message } = event;
   if(!message){ message = event; }
   if(message !== event) console.log('message: ', message);
   if ((message.subtype && message.subtype === 'bot_message') ||
        (!message.subtype && message.user === rtm.activeUserId) ) {
-         console.log('returning because of subtype');
     return;
   }
 
-  console.log('not returning');
-  // if(event.user == 'U9X9V0894') return;
   try {
     const user_email = await getUserEmailByID(event.user);
-    console.log(user_email);
     if(typeof user_email !== "string") {
       throw `invalid email: type is ${typeof user_email}`;
     }
     let user = await User.findOrCreate(event.user, user_email);
-    console.log('user inside rtm.on(message): ', user);
     const response = Object.assign({}, defaultResponse, {channel: event.channel});
-    if(! user.googleCalAuth)
+    if(!user.googleCalAuth)
     {
       response.text = `I need your permission to access google calendar: ${generateAuthCB(event.user)}`;
       let res = rtm.addOutgoingEvent(false, 'message', response);
