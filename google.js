@@ -195,18 +195,23 @@ const setReminder = async (slackID, subject, date) => {
       'timeZone': 'America/Los_Angeles'
     }
   }
-  calendar.events.insert({
-    calendarId: 'primary',
-    resource: event,
-  }, (err, event) => {
-    if(err) {
-      console.error('error in inserting reminder: ', err);
-      return;
-    }else{
-      console.log(event.data)
-      console.log('Event created: %s', event.data.htmlLink);
-    }
-  });
+  // return new Promise((resolve, reject) => {
+    calendar.events.insert({
+      calendarId: 'primary',
+      resource: event,
+    }, (err, event) => {
+      // err ? reject(err) : resolve(event.data.status)
+      if(!!!err){
+          console.log('Event created: %s', event.data.htmlLink);
+
+      }
+
+      return !!err || event.data.status;
+      // }else{
+      //   console.log(event.data)
+      // }
+    });
+  // })
 }
 //
 // const getAvail = async (slackID, start, end) => {
