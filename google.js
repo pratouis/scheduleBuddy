@@ -5,7 +5,7 @@
 'use strict';
 import { google } from 'googleapis';
 const OAuth2Client = google.auth.OAuth2;
-const keys = require('./client_secret2.json').web;
+const keys = require('./client_secret.json').web;
 const express = require('express');
 const router = new express.Router();
 import crypto from 'crypto';
@@ -143,50 +143,41 @@ router.get(REDIRECT_URL, (req, res) => {
 
 // const testEncryption
 
-
+/*
+ TEMPLATE FOR HOW TO GET EVENTS
+*/
 const getEvents = async (slackID) => {
     let user = await User.findOne({ slackID: slackID }).exec();
-    // , function(err, user) {
-    //   if(err){
-    //     console.error(err);
-    //     return;
-    //   }else{
-        let tokens = decryptGoogleCalAuth(user.googleCalAuth);
-        // let tokens = JSON.parse(user.googleCalAuth);
-        console.log(tokens);
-        oauth2Client.setCredentials(tokens);
-        const calendar = google.calendar({version: 'v3', auth: oauth2Client})
-        console.log(calendar);
-        calendar.events.list({
-          calendarId: 'primary',
-          timeMin: (new Date()).toISOString(),
-          maxResults: 10,
-          singleEvents: true,
-          orderBy: 'startTime',
-        }, (err, data) => {
-          if (err) return console.log('The API returned an error: ' + err);
-          const events = data.data.items;
-          if (events.length) {
-            console.log('Upcoming 10 events:');
-            const temp = events.map((event, i) => {
-            const start = event.start.dateTime || event.start.date;
-              console.log(`${start} - ${event.summary}`);
-              return `${start} - ${event.summary}`;
-            });
-            // return temp;
-          } else {
-            console.log('No upcoming events found.');
-            // return 'No upcoming events found.';
-          }
-        })
-      // }
-    // })
-
+    let tokens = decryptGoogleCalAuth(user.googleCalAuth);
+    console.log(tokens);
+    oauth2Client.setCredentials(tokens);
+    const calendar = google.calendar({version: 'v3', auth: oauth2Client})
+    console.log(calendar);
+    calendar.events.list({
+      calendarId: 'primary',
+      timeMin: (new Date()).toISOString(),
+      maxResults: 10,
+      singleEvents: true,
+      orderBy: 'startTime',
+    }, (err, data) => {
+      if (err) return console.log('The API returned an error: ' + err);
+      const events = data.data.items;
+      if (events.length) {
+        console.log('Upcoming 10 events:');
+        console.log(events[1]);
+        const temp = events.map((event, i) => {
+        const start = event.start.dateTime || event.start.date;
+          console.log(`${start} - ${event.summary}`);
+          return `${start} - ${event.summary}`;
+        });
+        // return temp;
+      } else {
+        console.log('No upcoming events found.');
+        // return 'No upcoming events found.';
+      }
+    })
 }
 
-const getRemindersDate = (slackID, date) => {
-
-}
 
 const setReminder = async (slackID, subject, date) => {
   let user = await User.findOne({ slackID }).exec();
@@ -217,7 +208,7 @@ const setReminder = async (slackID, subject, date) => {
     }
   });
 }
-// 
+//
 // const getAvail = async (slackID, start, end) => {
 //   try {
 //     let user = await User.findOne({ slackID }).exec();
@@ -253,5 +244,5 @@ module.exports = {
   generateAuthCB: generateAuthCB,
   getEvents: getEvents,
   setReminder: setReminder,
-  getAvail: getAvail
+  // getAvail: getAvail
 };

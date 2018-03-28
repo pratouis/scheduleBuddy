@@ -71,9 +71,9 @@ rtm.on('message', async (event) => {
       // console.log('auth request sent in ', res.ts);
     } else {
       // response.text = 'hi hello';
-      // getEvents(event.user);
+      getEvents(event.user);
       // setReminder(event.user, 'testing reminders', new Date().toString());
-      getAvail(event.user, null, null);
+      // getAvail(event.user, null, null);
       // let success = await rtm.addOutgoingEvent(true, 'message', response)
       // let success = await web.chat.postMessage({ channel: event.channel, text: response.text, subtype: 'bot_message' })
       // console.log('Message sent: ', success.ts);
