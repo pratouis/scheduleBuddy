@@ -4,7 +4,7 @@
 'use strict';
 import { google } from 'googleapis';
 const OAuth2Client = google.auth.OAuth2;
-const keys = require('./client_id.json').installed;
+const keys = require('./client_secret.json').installed;
 const express = require('express');
 const router = new express.Router();
 import crypto from 'crypto';
