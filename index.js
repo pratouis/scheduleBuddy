@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 const express = require('express');
 import { User } from './models/models';
 const { RTMClient, WebClient } = require('@slack/client');
-import { generateAuthCB, googleRoutes, getEvents } from './google';
+import { generateAuthCB, googleRoutes, getEvents, setReminder, getAvail } from './google';
 import { getUserEmailByID } from './routes';
 import axios from 'axios';
 const app = express();
@@ -70,9 +70,10 @@ rtm.on('message', async (event) => {
       // let res = await web.chat.postMessage({ channel: event.channel, text: response.text, subtype: 'bot_message' })
       // console.log('auth request sent in ', res.ts);
     } else {
-      response.text = 'hi hello';
-      getEvents(event.user);
-
+      // response.text = 'hi hello';
+      // getEvents(event.user);
+      // setReminder(event.user, 'testing reminders', new Date().toString());
+      getAvail(event.user, null, null);
       // let success = await rtm.addOutgoingEvent(true, 'message', response)
       // let success = await web.chat.postMessage({ channel: event.channel, text: response.text, subtype: 'bot_message' })
       // console.log('Message sent: ', success.ts);

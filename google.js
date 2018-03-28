@@ -42,7 +42,7 @@ const hashCal = (gCalAUTH) => {
 
 /* buffer must be 16 for hex, and key must fit */
 const buffers = {
-    iv: crypto.pseudoRandomBytes(16),
+    iv: Buffer.from(process.env.ENCRYPTION_IV, "hex"),
     key: new Buffer(process.env.ENCRYPTION_KEY),
 }
 
@@ -81,8 +81,8 @@ router.get(REDIRECT_URL, (req, res) => {
       res.status(500).json(err);
     }
     console.log(token)
-    const encryptTokens = token;
-    // const encryptTokens = encryptGoogleCalAuth(token);
+    // const encryptTokens = token;
+    const encryptTokens = encryptGoogleCalAuth(token);
     User.findOneAndUpdate(
       { slackID: req.query.state },
       { $set: { "googleCalAuth": encryptTokens } },
@@ -144,14 +144,15 @@ router.get(REDIRECT_URL, (req, res) => {
 // const testEncryption
 
 
-const getEvents = (slackID) => {
-    User.findOne({ slackID: slackID }, function(err, user) {
-      if(err){
-        console.error(err);
-        return;
-      }else{
-        // let tokens = decryptGoogleCalAuth(user.googleCalAuth);
-        let tokens = JSON.parse(user.googleCalAuth);
+const getEvents = async (slackID) => {
+    let user = await User.findOne({ slackID: slackID }).exec();
+    // , function(err, user) {
+    //   if(err){
+    //     console.error(err);
+    //     return;
+    //   }else{
+        let tokens = decryptGoogleCalAuth(user.googleCalAuth);
+        // let tokens = JSON.parse(user.googleCalAuth);
         console.log(tokens);
         oauth2Client.setCredentials(tokens);
         const calendar = google.calendar({version: 'v3', auth: oauth2Client})
@@ -178,15 +179,79 @@ const getEvents = (slackID) => {
             // return 'No upcoming events found.';
           }
         })
-      }
-    })
+      // }
+    // })
 
 }
 
+const getRemindersDate = (slackID, date) => {
 
+}
+
+const setReminder = async (slackID, subject, date) => {
+  let user = await User.findOne({ slackID }).exec();
+  const tokens = decryptGoogleCalAuth(user.googleCalAuth);
+  oauth2Client.setCredentials(tokens);
+  const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+  const event = {
+    'summary': subject,
+    'start': {
+      'date': new Date(date).toLocaleDateString(),
+      'timeZone': 'America/Los_Angeles'
+    },
+    'end': {
+      'date': new Date(date).toLocaleDateString(),
+      'timeZone': 'America/Los_Angeles'
+    }
+  }
+  calendar.events.insert({
+    calendarId: 'primary',
+    resource: event,
+  }, (err, event) => {
+    if(err) {
+      console.error('error in inserting reminder: ', err);
+      return;
+    }else{
+      console.log(event.data)
+      console.log('Event created: %s', event.data.htmlLink);
+    }
+  });
+}
+// 
+// const getAvail = async (slackID, start, end) => {
+//   try {
+//     let user = await User.findOne({ slackID }).exec();
+//     const tokens = decryptGoogleCalAuth(user.googleCalAuth);
+//     oauth2Client.setCredentials(tokens);
+//     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+//     calendar.freebusy.query({
+//       resource: {   //needed to include resource instead of sending the params directly.
+//                   timeMin: "2018-03-28T22:00:00.000Z",
+//                   timeMax: "2018-03-28T23:00:00.000Z",
+//                   'timeZone': 'America/Los_Angeles'
+//                 }
+//     }, (err, res) => {
+//       if(err){
+//         console.log('There was an error! ', err);
+//         return;
+//       }else{
+//         console.log(res);
+//       }
+//     })
+//   } catch(err) {
+//     console.error('error ', err);
+//   }
+// }
+// const setClient = (slackID) => {
+//   let user = await User.findOne({ slackID }).exec();
+//   const tokens = decryptGoogleCalAuth(user.googleCalAuth);
+//   oauth2Client.setCredentials(tokens);
+// }
 
 module.exports = {
   googleRoutes: router,
   generateAuthCB: generateAuthCB,
-  getEvents: getEvents
+  getEvents: getEvents,
+  setReminder: setReminder,
+  getAvail: getAvail
 };
