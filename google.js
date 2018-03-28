@@ -12,12 +12,12 @@ import crypto from 'crypto';
 
 import { User } from './models/models';
 
-// const CLIENT_ID = keys.client_id;
-// const CLIENT_SECRET = keys.client_secret;
-// const REDIRECT_URL = keys.redirect_uris[0];
+const CLIENT_ID = keys.client_id;
+const CLIENT_SECRET = keys.client_secret;
+const REDIRECT_URL = "/oauthcb";
 
-const oauth2Client = new OAuth2Client(process.env.GOOGLE_CAL_CLIENT_ID,
-  process.env.GOOGLE_CAL_SECRET, "/oauthcb");
+const oauth2Client = new OAuth2Client(CLIENT_ID,
+  CLIENT_SECRET, REDIRECT_URL);
 // const url = oauth2Client.generateAuthUrl({
 //   access_type: 'offline', // will return a refresh token
 //   scope: 'https://www.googleapis.com/auth/calendar', // can be a space-delimited string or an array of scopes
@@ -32,8 +32,8 @@ const generateAuthCB = (slackID) => {
   return oauth2Client.generateAuthUrl({
     access_type: 'offline', // will return a refresh token
     scope: 'https://www.googleapis.com/auth/calendar', // can be a space-delimited string or an array of scopes
-    redirect_uri: `http://localhost:3000/oauthcb`,
-    state: slackID, // state is a query param passed to redirect_uri
+    redirect_uri: `http://localhost:3000/${REDIRECT_URL}`,
+    state: slackID, // state is a query param passed to redirect_uri,
   })
 }
 
@@ -46,7 +46,7 @@ const hashCal = (gCalAUTH) => {
   return hash.digest('hex');
 }
 
-router.get('/oauthcb', async (req, res) => {
+router.get(REDIRECT_URL, async (req, res) => {
   console.log('inside router')
   // TODO import express BODY PARSER
     try {
@@ -55,7 +55,7 @@ router.get('/oauthcb', async (req, res) => {
       let user = await User.findOneAndUpdate(
         { slackID: req.query.state },
         { $set: { "googleCalAuth": req.query.code } },
-        { returnNewDocument: true }
+        { new: true }
       );
       console.log(user);
       res.status(200).send('Thanks for connecting your calendar!  You can go back to Slack and talk to @buddy');
@@ -65,6 +65,48 @@ router.get('/oauthcb', async (req, res) => {
     }
 });
 
+const getEvents = async (slackID) => {
+  try {
+    console.log('inside getEvents');
+    console.log(CLIENT_ID, CLIENT_SECRET, REDIRECT_URL)
+    let user = await User.findOne({ slackID: slackID });
+    console.log(user);
+    oauth2Client.setCredentials(user.googleCalAuth);
+    const calendar = google.calendar({version: 'v3', oauth2Client})
+    calendar.events.list({
+      calendarId: 'primary',
+      timeMin: (new Date()).toISOString(),
+      maxResults: 10,
+      singleEvents: true,
+      orderBy: 'startTime',
+    }, (err, data) => {
+      if (err) return console.log('The API returned an error: ' + err);
+      const events = data.data.items;
+      if (events.length) {
+        console.log('Upcoming 10 events:');
+        const temp = events.map((event, i) => {
+        const start = event.start.dateTime || event.start.date;
+          console.log(`${start} - ${event.summary}`);
+          return `${start} - ${event.summary}`;
+        });
+        // return temp;
+      } else {
+        console.log('No upcoming events found.');
+        // return 'No upcoming events found.';
+      }
+    });
+  } catch(err) {
+
+  }
+}
+
+router.get('/listEvents/:slackID',  async (req, res) => {
+  try {
+
+  } catch(err) {
+    res.status(500).json(err);
+  }
+});
 // TODO set reminder
 // TODO set meeting
 
@@ -105,5 +147,6 @@ router.get('/oauthcb', async (req, res) => {
 
 module.exports = {
   googleRoutes: router,
-  generateAuthCB: generateAuthCB
+  generateAuthCB: generateAuthCB,
+  getEvents: getEvents
 };
