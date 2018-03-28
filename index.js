@@ -118,12 +118,13 @@ rtm.on('message', async (event) => {
   // using email
 });
 
-app.post('/slack/slash-commands/send-me-buttons', urlencodedParser, (req, res) => {
-  res.status(200).end();
+app.post('/send-me-buttons', urlencodedParser, (req, res) => {
+  //res.status(200).end();
   let reqBody = req.body;
   let responseURL = reqBody.response_url;
-
-  if (reqBody.token != process.env.SLACK_TOKEN) {
+  console.log('inside event')
+  if (reqBody.token != process.env.SLACK_MSG_TOKEN) {
+    console.log('access forbidden')
     res.status(403).end("Access forbidden");
   } else {
     let message = {
@@ -159,35 +160,10 @@ app.post('/slack/slash-commands/send-me-buttons', urlencodedParser, (req, res) =
             }
         ]
     }
-    sendMessageToSlackResponseURL(responseURL, message);
+    console.log(message)
+    res.send(message)
   }
 })
-
-app.post('/slack/actions', urlencodedParser, (req, res) =>{
-    res.status(200).end() // best practice to respond with 200 status
-    var actionJSONPayload = JSON.parse(req.body.payload) // parse URL-encoded payload JSON string
-    var message = {
-        "text": actionJSONPayload.user.name+" clicked: "+actionJSONPayload.actions[0].name,
-        "replace_original": false
-    }
-    sendMessageToSlackResponseURL(actionJSONPayload.response_url, message)
-})
-
-function sendMessageToSlackResponseURL(responseURL, JSONmessage){
-    var postOptions = {
-        uri: responseURL,
-        method: 'POST',
-        headers: {
-            'Content-type': 'application/json'
-        },
-        json: JSONmessage
-    }
-    request(postOptions, (error, response, body) => {
-        if (error){
-            // handle errors as you see fit
-        }
-    })
-}
 /*
 * helper function that asks user for authentication
 */
