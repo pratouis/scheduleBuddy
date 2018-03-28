@@ -3,7 +3,7 @@ out
 .eslintcache
 env.sh
 .DS_Store
-
+client_secret.json
 # Logs
 logs
 *.log

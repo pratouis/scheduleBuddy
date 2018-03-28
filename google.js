@@ -38,7 +38,6 @@ app.get(REDIRECT_URL, (req, res) => {
 app.listen(3000)
 
 function getAccessToken (oauth2Client, callback) {
-  // generate consent page url
 
 
   console.log('Visit the url: ', url);
@@ -48,8 +47,7 @@ function getAccessToken (oauth2Client, callback) {
       if (err) {
         return callback(err);
       }
-      // set tokens to the client
-      // TODO: tokens should be set by OAuth2 client.
+
       oauth2Client.setCredentials(tokens);
       callback();
     });
