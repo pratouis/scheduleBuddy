@@ -4,7 +4,7 @@
 
 'use strict';
 import { google } from 'googleapis';
-import { getUserEmailByID } from './routes';
+import { getUserInfoByID } from './routes';
 
 const OAuth2Client = google.auth.OAuth2;
 const keys = require('./client_secret.json').web;
@@ -12,7 +12,7 @@ const express = require('express');
 const router = new express.Router();
 import crypto from 'crypto';
 
-import { User, Reminder } from './models/models';
+import { User, Reminder, Meeting } from './models/models';
 
 const CLIENT_ID = keys.client_id;
 const CLIENT_SECRET = keys.client_secret;
@@ -273,19 +273,22 @@ const createMeeting = async (slackID, params) => {
   date.setSeconds(times[2]);
   let endDate = new Date(date);
   endDate.setHours(date.getHours() + 1);
-
-  // let emails = invitees.map( async (invitee) => {
-  //   invitee = invitee.replace(/[\@\<\>]/g,'');
-  //   return { email: getUserEmailByID(invitee) };
-  // });
-  // Promise.all(emails).then((completed) => console.log(completed));
+  let title = "meeting with ";
+  const last = invitees.length;
+  let emails = await Promise.all(invitees.map( async (invitee, index) => {
+    invitee = invitee.replace(/[\@\<\>]/g,'');
+    let user_info = await getUserInfoByID(invitee);
+    title += index === last ? `and ${user_info.name}` : `${user_info.name}, `;
+    return { email: user_info.email };
+  }));
+  // Promise.all(emails).then((completed) => console.log('emails: ',completed));
 
   let user = await User.findOne({ slackID }).exec();
   const tokens = decryptGoogleCalAuth(user.googleCalAuth);
   oauth2Client.setCredentials(tokens);
   const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
   const event = {
-    'summary': subject,
+    'summary': subject || title,
     'location': location,
     'start' : {
       'dateTime': date.toISOString(),
@@ -294,14 +297,14 @@ const createMeeting = async (slackID, params) => {
     'end' : {
       'dateTime': endDate.toISOString(),
       'timeZone': 'America/Los_Angeles'
-    }
-    // 'attendees': emails
+    },
+    'attendees': emails
   }
-  console.log(event);
+
   calendar.events.insert({
     calendarId: 'primary',
     resource: event
-  }, (err, event) => {
+  }, (err, gEvent) => {
     if(err){
       console.error(err);
     }else{
@@ -314,7 +317,7 @@ const createMeeting = async (slackID, params) => {
           start: date,
           end: endDate,
         },
-        status: confirmed,
+        status: 'confirmed',
         userID: user._id
       });
       newMeeting.save().then((meeting) =>

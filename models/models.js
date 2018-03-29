@@ -21,10 +21,10 @@ const userSchema = mongoose.Schema({
   }
 });
 
-userSchema.statics.findOrCreate =  function (slackID, email) {
+userSchema.statics.findOrCreate =  function (slackID, email, name) {
   return this.findOneAndUpdate(
-    { slackID: slackID },
-    { $setOnInsert: { email: email } },
+    { slackID },
+    { $setOnInsert: { email, name } },
     { upsert: true, new: true }
   ).exec()
 }

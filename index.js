@@ -3,7 +3,7 @@ const express = require('express');
 import { User } from './models/models';
 const { RTMClient, WebClient } = require('@slack/client');
 import { generateAuthCB, googleRoutes, getEvents, setReminder, getAvail, createMeeting } from './google';
-import { getUserEmailByID } from './routes';
+import { getUserInfoByID } from './routes';
 import axios from 'axios';
 const app = express();
 app.use('/', googleRoutes);
@@ -64,15 +64,15 @@ rtm.on('message', async (event) => {
   if(message !== event){
     // console.log('message: ', message);
   }
-  // console.log('event: ', event);
+  console.log('event: ', event);
   try {
     // if(typeof user_email !== "string") {
     //   throw `invalid email: type is ${typeof user_email}`;
     // }
     let user = await User.findOne({ slackID: event.user });
     if(!user){
-      const user_email = await getUserEmailByID(event.user);
-      user = await User.findOrCreate(event.user, user_email);
+      const user_info = await getUserEmailByID(event.user);
+      user = await User.findOrCreate(event.user, user_info.email, user_info.name);
     }
     // let user = await User.findOrCreate(event.user);
     const botResponse = Object.assign({}, defaultResponse, {channel: event.channel});
@@ -80,7 +80,8 @@ rtm.on('message', async (event) => {
       sessionId: event.user
     });
     request.on('response', function(response) {
-        if(response.result.action === 'meeting.add' || response.result.action === 'reminder.add'){
+      console.log('response result: ', response);
+        if(response.result.metadata.intentName === 'meeting.add' || response.result.action === 'reminder.add'){
           if(!user.googleCalAuth)
           {
             botResponse.text = `I need your permission to access google calendar: ${generateAuthCB(event.user)}`;
@@ -97,7 +98,7 @@ rtm.on('message', async (event) => {
 
           //TO-DO: Google calendar handling once all parameters are filled out
           if(!response.result.actionIncomplete) {
-
+            console.log('messages: ',response.result.fulfillment.messages);
             //Add a google calendar event with [invitees, day, time] as params
             //& [subject, location] as optional params
             // console.log(response.result.metadata.intentName, response.result.metadata.intentName === 'meeting.add')
