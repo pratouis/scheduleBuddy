@@ -4,13 +4,15 @@
 
 'use strict';
 import { google } from 'googleapis';
+import { getUserEmailByID } from './routes';
+
 const OAuth2Client = google.auth.OAuth2;
 const keys = require('./client_secret.json').web;
 const express = require('express');
 const router = new express.Router();
 import crypto from 'crypto';
 
-import { User } from './models/models';
+import { User, Reminder } from './models/models';
 
 const CLIENT_ID = keys.client_id;
 const CLIENT_SECRET = keys.client_secret;
@@ -47,9 +49,6 @@ const buffers = {
 }
 
 const encryptGoogleCalAuth = (tokens) => {
-  console.log(tokens)
-  const { access_token, refresh_token, expiry_date } = tokens;
-  console.log(access_token, refresh_token, expiry_date)
   let text = ""
   try {
     text = JSON.stringify(tokens);
@@ -61,26 +60,21 @@ const encryptGoogleCalAuth = (tokens) => {
     console.error(err)
     return text;
   }
-
 }
 
 const decryptGoogleCalAuth = (text) => {
   let decipher = crypto.createDecipheriv("aes128", buffers.key, buffers.iv);
   let result = decipher.update(text, "hex");
   result += decipher.final();
-  console.log(result)
   return JSON.parse(result);
 }
 
 router.get(REDIRECT_URL, (req, res) => {
-  console.log('inside router')
-  console.log(req.query);
   oauth2Client.getToken(req.query.code, (err, token) => {
     if(err) {
       console.error('error in retrieving token: ',err)
       res.status(500).json(err);
     }
-    console.log(token)
     // const encryptTokens = token;
     const encryptTokens = encryptGoogleCalAuth(token);
     User.findOneAndUpdate(
@@ -88,7 +82,6 @@ router.get(REDIRECT_URL, (req, res) => {
       { $set: { "googleCalAuth": encryptTokens } },
       { new: true }
     ).then((user) => {
-      console.log('updated user? ',user);
       res.status(200).json(token);
     }).catch((err) => {
       console.error('error in updating user: ',err);
@@ -178,35 +171,61 @@ const getEvents = async (slackID) => {
     })
 }
 
-
-const setReminder = async (slackID, subject, date) => {
-  let user = await User.findOne({ slackID }).exec();
-  const tokens = decryptGoogleCalAuth(user.googleCalAuth);
-  oauth2Client.setCredentials(tokens);
+const getPrimaryID = () => {
   const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-  const event = {
-    'summary': subject,
-    'start': {
-      'date': new Date(date).toLocaleDateString(),
-      'timeZone': 'America/Los_Angeles'
-    },
-    'end': {
-      'date': new Date(date).toLocaleDateString(),
-      'timeZone': 'America/Los_Angeles'
+  calendar.calendarList.list({}, (err, data) => {
+    if(err){
+      console.log('err: ', err);
+      return;
+    } else {
+      console.log('data: ', data);
+      return;
     }
-  }
-  // return new Promise((resolve, reject) => {
+  })
+}
+
+
+const setReminder = async (slackID, params) => {
+    let { date, subject } = params;
+    date = date.replace(/-/g, '/');
+    let user = await User.findOne({ slackID }).exec();
+    const tokens = decryptGoogleCalAuth(user.googleCalAuth);
+    oauth2Client.setCredentials(tokens);
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    const event = {
+      'summary': subject,
+      'start': {
+        'date': new Date(date).toLocaleDateString(),
+        'timeZone': 'America/Los_Angeles'
+      },
+      'end': {
+        'date': new Date(date).toLocaleDateString(),
+        'timeZone': 'America/Los_Angeles'
+      }
+    }
+    // return new Promise((resolve, reject) => {
     calendar.events.insert({
       calendarId: 'primary',
       resource: event,
-    }, (err, event) => {
-      // err ? reject(err) : resolve(event.data.status)
-      if(!!!err){
-          console.log('Event created: %s', event.data.htmlLink);
-
+    }, (err, gEvent) => {
+      if(err){
+        console.error(err);
+      }else{
+        console.log('Event created: %s', gEvent.data.htmlLink);
+        const newReminder = new Reminder({
+          eventID: gEvent.data.id,
+          day: date,
+          subject,
+          userID: user._id
+        });
+        newReminder.save().then((reminder) =>
+          console.log(reminder)
+        ).catch((err) => console.error(err));
       }
 
-      return !!err || event.data.status;
+      // err ? reject(err) : resolve(event.data.status)
+
+      // return !!err || event.data.status;
       // }else{
       //   console.log(event.data)
       // }
@@ -244,10 +263,73 @@ const setReminder = async (slackID, subject, date) => {
 //   oauth2Client.setCredentials(tokens);
 // }
 
+
+const createMeeting = async (slackID, params) => {
+  const { invitees, day, time, subject, location } = params;
+  let date = new Date(day.replace(/-/g, '/'));
+  let times = time.split(':');
+  date.setHours(times[0]);
+  date.setMinutes(times[1]);
+  date.setSeconds(times[2]);
+  let endDate = new Date(date);
+  endDate.setHours(date.getHours() + 1);
+
+  // let emails = invitees.map( async (invitee) => {
+  //   invitee = invitee.replace(/[\@\<\>]/g,'');
+  //   return { email: getUserEmailByID(invitee) };
+  // });
+  // Promise.all(emails).then((completed) => console.log(completed));
+
+  let user = await User.findOne({ slackID }).exec();
+  const tokens = decryptGoogleCalAuth(user.googleCalAuth);
+  oauth2Client.setCredentials(tokens);
+  const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+  const event = {
+    'summary': subject,
+    'location': location,
+    'start' : {
+      'dateTime': date.toISOString(),
+      'timeZone': 'America/Los_Angeles'
+    },
+    'end' : {
+      'dateTime': endDate.toISOString(),
+      'timeZone': 'America/Los_Angeles'
+    }
+    // 'attendees': emails
+  }
+  console.log(event);
+  calendar.events.insert({
+    calendarId: 'primary',
+    resource: event
+  }, (err, event) => {
+    if(err){
+      console.error(err);
+    }else{
+      console.log('Event created: %s', gEvent.data.htmlLink);
+      const newMeeting = new Meeting({
+        eventID: gEvent.data.id,
+        day,
+        subject,
+        time: {
+          start: date,
+          end: endDate,
+        },
+        status: confirmed,
+        userID: user._id
+      });
+      newMeeting.save().then((meeting) =>
+        console.log(meeting)
+      ).catch((err) => console.error(err));
+    }
+  })
+}
+
+
 module.exports = {
   googleRoutes: router,
   generateAuthCB: generateAuthCB,
   getEvents: getEvents,
   setReminder: setReminder,
+  createMeeting: createMeeting
   // getAvail: getAvail
 };

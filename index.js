@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 const express = require('express');
 import { User } from './models/models';
 const { RTMClient, WebClient } = require('@slack/client');
-import { generateAuthCB, googleRoutes, getEvents, setReminder, getAvail } from './google';
+import { generateAuthCB, googleRoutes, getEvents, setReminder, getAvail, createMeeting } from './google';
 import { getUserEmailByID } from './routes';
 import axios from 'axios';
 const app = express();
@@ -49,30 +49,37 @@ const defaultResponse = {
 2)
 */
 
-
+// rtm.on('user_typing', (event) => {
+//   console.log('user: ', event);
+// })
 rtm.on('message', async (event) => {
   // For structure of `event`, see https://api.slack.com/events/reaction_added
   let { message } = event;
-  if(!message){ message = event; }
+  if(!message){ message = event;}
   if(message !== event) /*console.log('message: ', message);*/
   if ((message.subtype && message.subtype === 'bot_message') ||
        (!message.subtype && message.user === rtm.activeUserId) ) {
     return;
   }
-
+  if(message !== event){
+    // console.log('message: ', message);
+  }
+  // console.log('event: ', event);
   try {
-    const user_email = await getUserEmailByID(event.user);
-    if(typeof user_email !== "string") {
-      throw `invalid email: type is ${typeof user_email}`;
+    // if(typeof user_email !== "string") {
+    //   throw `invalid email: type is ${typeof user_email}`;
+    // }
+    let user = await User.findOne({ slackID: event.user });
+    if(!user){
+      const user_email = await getUserEmailByID(event.user);
+      user = await User.findOrCreate(event.user, user_email);
     }
-    let user = await User.findOrCreate(event.user, user_email);
+    // let user = await User.findOrCreate(event.user);
     const botResponse = Object.assign({}, defaultResponse, {channel: event.channel});
     const request = test.textRequest(event.text, {
       sessionId: event.user
     });
-    console.log('found user');
     request.on('response', function(response) {
-        console.log('response.result: ', response.result);
         if(response.result.action === 'meeting.add' || response.result.action === 'reminder.add'){
           if(!user.googleCalAuth)
           {
@@ -86,17 +93,22 @@ rtm.on('message', async (event) => {
           console.log('what to send back: ', response.result.fulfillment.speech);
           console.log('currently recorded params: ', response.result.parameters);
           console.log('this conversation is not yet complete: ', response.result.actionIncomplete);
+          console.log('action : ', response.result);
 
           //TO-DO: Google calendar handling once all parameters are filled out
           if(!response.result.actionIncomplete) {
+
             //Add a google calendar event with [invitees, day, time] as params
             //& [subject, location] as optional params
-            if(response.result.action === 'meeting.add') {
+            // console.log(response.result.metadata.intentName, response.result.metadata.intentName === 'meeting.add')
+            if(response.result.metadata.intentName === 'meeting.add') {
+              console.log('meeting to use this info: ', response.result);
+              createMeeting(event.user, response.result.parameters);
             }
 
             //Add a google calendar event with [date, subject] -> as params
-            if (response.result.action === 'reminder.add') {
-              setReminder(event.user, response.result.parameters.subject, response.result.parameters.date);
+            if (response.result.metadata.intentName === 'reminder.add') {
+              setReminder(event.user, response.result.parameters);
               // console.log('did it work? ', )
             }
           }
@@ -105,9 +117,9 @@ rtm.on('message', async (event) => {
         botResponse.text = response.result.fulfillment.speech;
         // botResponse.thread_ts = event.ts;
         // console.log('time checkin: ', event);
-        console.log("buddy's response: ", botResponse);
+        // console.log("buddy's response: ", botResponse);
         rtm.addOutgoingEvent(response.result.actionIncomplete, 'message', botResponse);
-        
+
       })
 
 
