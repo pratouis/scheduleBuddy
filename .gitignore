@@ -63,3 +63,4 @@ typings/
 # dotenv environment variables file
 .env
 client_secret.json
+client_secret2.json
