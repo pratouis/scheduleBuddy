@@ -25,33 +25,16 @@ mongoose.connect(process.env.MONGODB_URI);
 */
 const rtm = new RTMClient(process.env.BOT_SLACK_TOKEN);
 rtm.start();
-// TODO: @Chris or @Trevor use this package to integrate with APIAI
-// const apiai = require('apiai');
-// const app = apiai(process.env.APIAI_CLIENT_TOKEN);
-// console.log(rtm.users);
 /*
 * Web API to be used to parse through messages ?
 */
-const web = new WebClient(process.env.SLACK_TOKEN);
-
-/* WEBHOOK needed to communicate with slack server and slack server to our app */
-const currentTime = new Date().toTimeString();
+// const web = new WebClient(process.env.SLACK_TOKEN);
 
 const defaultResponse = {
   reply_broadcast: true,
   subtype: 'bot_message',
 }
 
-
-// TODO
-/*
-1) database
-2)
-*/
-
-// rtm.on('user_typing', (event) => {
-//   console.log('user: ', event);
-// })
 rtm.on('message', async (event) => {
   // For structure of `event`, see https://api.slack.com/events/reaction_added
   // let { message } = event;
@@ -66,19 +49,18 @@ rtm.on('message', async (event) => {
   // }
   console.log('event: ', event);
   try {
-    // if(typeof user_email !== "string") {
-    //   throw `invalid email: type is ${typeof user_email}`;
-    // }
     let user = await User.findOne({ slackID: event.user });
     if(!user){
       const user_info = await getUserInfoByID(event.user);
       user = await User.findOrCreate(event.user, user_info.email, user_info.name);
     }
+
     // let user = await User.findOrCreate(event.user);
     const botResponse = Object.assign({}, defaultResponse, {channel: event.channel});
     const request = test.textRequest(event.text, {
       sessionId: event.user
     });
+    getAvail(event.user);
     request.on('response', function(response) {
       console.log('response result: ', response);
         if(response.result.metadata.intentName === 'meeting.add' || response.result.action === 'reminder.add'){

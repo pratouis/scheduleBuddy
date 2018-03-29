@@ -96,7 +96,7 @@ const inviteSchema = mongoose.Schema({
   },
   hostID: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
+    ref: 'User',
     required: true,
   },
   status: String
@@ -104,7 +104,7 @@ const inviteSchema = mongoose.Schema({
 module.exports = {
   User: mongoose.model('User', userSchema),
   Reminder: mongoose.model('Reminder', reminderSchema),
-  Meeting: mongoose.model('Meeting', meetingSchema)
+  Meeting: mongoose.model('Meeting', meetingSchema),
   Invite: mongoose.model('Invite', inviteSchema),
 };
 

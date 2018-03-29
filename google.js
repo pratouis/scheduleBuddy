@@ -88,50 +88,6 @@ router.get(REDIRECT_URL, (req, res) => {
       res.status(500).send(err);
     })
   });
-  // if (err) return callback(err);
-  //     oAuth2Client.setCredentials(token);)
-  // .then((tokens) => console.log('tokens from getToken: ',tokens))
-  // .catch(err => console.log('error in getToken: ',err))
-  // TODO import express BODY PARSER
-
-      // let slackID = req.query.state;
-      // console.log('query: ', req.query);
-      // oauth2Client.getToken(req.query.code, (err, token) => {
-      //   if(err){
-      //     console.error('error in retrieving token: ', err);
-      //     res.status(500).send(err);
-      //     return;
-      //   }
-      //   console.log(token);
-      //   const encryptTokens = encryptGoogleCalAuth(res);
-      //   console.log(assert.equal(tokens,decryptGoogleCalAuth(encryptTokens)));
-      //   User.findOneAndUpdate(
-      //     { slackID: req.query.state },
-      //     { $set: { "googleCalAuth": encryptTokens } },
-      //     { new: true }
-      //   ).then((user) => {
-      //     console.log('updated user? ',user);
-      //     res.status(200).json(token);
-      //   }).catch((err) => {
-      //     console.error('error in updating user: ',err);
-      //     res.status(500).send(err);
-      //   })
-      // });
-      // console.log(res.data);
-      // const encryptTokens = encryptGoogleCalAuth(res);
-      // console.log(assert.equal(tokens,decryptGoogleCalAuth(encryptTokens)));
-      // let user = await User.findOneAndUpdate(
-      //   { slackID: req.query.state },
-      //   { $set: { "googleCalAuth": encryptTokens } },
-      //   { new: true }
-      // );
-      // console.log(user);
-      // res.status(200).json(res);
-      // res.status(200).send('Thanks for connecting your calendar!  You can go back to Slack and talk to @buddy');
-    // } catch (err) {
-    //   console.log('error in updating user: ', err);
-    //   res.status(500).send(err);
-    // }
 });
 
 // const testEncryption
@@ -171,19 +127,46 @@ const getEvents = async (slackID) => {
     })
 }
 
-const getPrimaryID = () => {
+// const getPrimaryID = () => {
+//   const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+//   calendar.calendarList.list({}, (err, data) => {
+//     if(err){
+//       console.log('err: ', err);
+//       return;
+//     } else {
+//       console.log('data from getPrimaryID: ', data.data.items);
+//       return;
+//     }
+//   })
+// }
+
+const getAvail = async (slackID) => {
+  console.log('in getAvail');
+  let user = await User.findOne({ slackID }).exec();
+  const tokens = decryptGoogleCalAuth(user.googleCalAuth);
+  oauth2Client.setCredentials(tokens);
   const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-  calendar.calendarList.list({}, (err, data) => {
-    if(err){
-      console.log('err: ', err);
+  calendar.freebusy.query({
+    resource: {
+      items: [{'id': user.email}],
+      timeMin: "2018-03-29T22:00:00.000Z",
+      timeMax: "2018-03-29T23:00:00.000Z"
+    }
+  }, (err, res) => {
+    if(err) {
+      console.error(err);
       return;
+    }
+    // console.log(res.data.calendars[user.email])
+    if(res.data.calendars){
+      console.log(res.data.calendars[user.email]);
+      // res.data.calendars[user.email].busy.map((obj) => console.log('busy: ', obj));
+      // res.data.calendars[user.email].errors.map((obj) => console.error('err: ', obj));
     } else {
-      console.log('data: ', data);
-      return;
+      console.log(res);
     }
   })
 }
-
 
 const setReminder = async (slackID, params) => {
     let { date, subject } = params;
@@ -323,6 +306,7 @@ const createMeeting = async (slackID, params) => {
       console.error(err);
     }else{
       console.log('Event created: %s', gEvent.data.htmlLink);
+      console.log('id: ', gEvent.data.id);
       const newMeeting = new Meeting({
         eventID: gEvent.data.id,
         day,
@@ -348,6 +332,6 @@ module.exports = {
   generateAuthCB: generateAuthCB,
   getEvents: getEvents,
   setReminder: setReminder,
-  createMeeting: createMeeting
-  // getAvail: getAvail
+  createMeeting: createMeeting,
+  getAvail: getAvail,
 };
