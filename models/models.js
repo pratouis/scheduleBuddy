@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { getUserEmailByID } from '../routes';
+import { getUserInfoByID } from '../routes';
 const userSchema = mongoose.Schema({
   email: {
     type: String,
@@ -28,6 +28,7 @@ userSchema.statics.findOrCreate =  function (slackID, email, name) {
     { upsert: true, new: true }
   ).exec()
 }
+
 
 const reminderSchema = mongoose.Schema({
   eventID: {
@@ -82,10 +83,29 @@ const meetingSchema = mongoose.Schema({
   }
 })
 
+
+const inviteSchema = mongoose.Schema({
+  eventID: {
+    type: String,
+    required: true,
+  },
+  inviteeID: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+  },
+  hostID: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+    required: true,
+  },
+  status: String
+})
 module.exports = {
   User: mongoose.model('User', userSchema),
   Reminder: mongoose.model('Reminder', reminderSchema),
   Meeting: mongoose.model('Meeting', meetingSchema)
+  Invite: mongoose.model('Invite', inviteSchema),
 };
 
 // var evetSchema = {

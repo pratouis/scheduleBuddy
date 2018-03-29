@@ -12,7 +12,7 @@ const express = require('express');
 const router = new express.Router();
 import crypto from 'crypto';
 
-import { User, Reminder, Meeting } from './models/models';
+import { User, Reminder, Meeting, Invite } from './models/models';
 
 const CLIENT_ID = keys.client_id;
 const CLIENT_SECRET = keys.client_secret;
@@ -262,6 +262,15 @@ const setReminder = async (slackID, params) => {
 //   const tokens = decryptGoogleCalAuth(user.googleCalAuth);
 //   oauth2Client.setCredentials(tokens);
 // }
+const createInvite = (inviteeID, eventID, hostID) => {
+  const invite = new Invite({
+    eventID,
+    inviteeID,
+    hostID,
+    status: 'pending'
+  });
+  invite.save().catch(err => console.error(err));
+}
 
 
 const createMeeting = async (slackID, params) => {
@@ -275,17 +284,22 @@ const createMeeting = async (slackID, params) => {
   endDate.setHours(date.getHours() + 1);
   let title = "meeting with ";
   const last = invitees.length;
+  // try {
+  // let user_info = null;
+  let user = null;
   let emails = await Promise.all(invitees.map( async (invitee, index) => {
     invitee = invitee.replace(/[\@\<\>]/g,'');
-    let user_info = await getUserInfoByID(invitee);
-    title += index === last ? `and ${user_info.name}` : `${user_info.name}, `;
-    return { email: user_info.email };
+    user = await User.findOne({ slackID: invitee }).exec();
+    if(!user){
+      const user_info = await getUserInfoByID(invitee);
+      user = await User.findOrCreate(invitee, user_info.email, user_info.name);
+    }
+    title += index === last ? `and ${user.name}` : `${user.name}, `;
+    return { email: user.email };
   }));
-  // Promise.all(emails).then((completed) => console.log('emails: ',completed));
 
-  let user = await User.findOne({ slackID }).exec();
-  const tokens = decryptGoogleCalAuth(user.googleCalAuth);
-  oauth2Client.setCredentials(tokens);
+  user = await User.findOne({ slackID }).exec();
+  oauth2Client.setCredentials(decryptGoogleCalAuth(user.googleCalAuth));
   const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
   const event = {
     'summary': subject || title,
@@ -326,6 +340,7 @@ const createMeeting = async (slackID, params) => {
     }
   })
 }
+
 
 
 module.exports = {

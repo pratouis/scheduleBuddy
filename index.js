@@ -54,16 +54,16 @@ const defaultResponse = {
 // })
 rtm.on('message', async (event) => {
   // For structure of `event`, see https://api.slack.com/events/reaction_added
-  let { message } = event;
-  if(!message){ message = event;}
-  if(message !== event) /*console.log('message: ', message);*/
-  if ((message.subtype && message.subtype === 'bot_message') ||
-       (!message.subtype && message.user === rtm.activeUserId) ) {
+  // let { message } = event;
+  // if(!message){ message = event;}
+  // if(message !== event) /*console.log('message: ', message);*/
+  if ((event.subtype && event.subtype === 'bot_message') ||
+       (!event.subtype && event.user === rtm.activeUserId) ) {
     return;
   }
-  if(message !== event){
-    // console.log('message: ', message);
-  }
+  // if(event !== event){
+  //   // console.log('message: ', message);
+  // }
   console.log('event: ', event);
   try {
     // if(typeof user_email !== "string") {
@@ -71,7 +71,7 @@ rtm.on('message', async (event) => {
     // }
     let user = await User.findOne({ slackID: event.user });
     if(!user){
-      const user_info = await getUserEmailByID(event.user);
+      const user_info = await getUserInfoByID(event.user);
       user = await User.findOrCreate(event.user, user_info.email, user_info.name);
     }
     // let user = await User.findOrCreate(event.user);
