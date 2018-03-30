@@ -84,6 +84,13 @@ rtm.on('message', async (event) => {
             // console.log(response.result.metadata.intentName, response.result.metadata.intentName === 'meeting.add')
             if(response.result.metadata.intentName === 'meeting.add') {
               console.log('meeting to use this info: ', response.result);
+              const dateStyles = {
+                weekday: 'short',
+                month: 'long',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+              };
               let { invitees, day, time, subject, location } = response.result.parameters;
               let startDate = new Date(day.replace(/-/g, '/'));
               let times = time.split(':');
@@ -91,7 +98,7 @@ rtm.on('message', async (event) => {
               startDate.setMinutes(times[1]);
               startDate.setSeconds(times[2]);
               let endDate = new Date(new Date(startDate).setHours(startDate.getHours()+1));
-              console.log(startDate.toLocaleDateString(), endDate.toLocaleDateString());
+              console.log(startDate.toLocaleDateString("en-US", dateStyles), endDate.toLocaleDateString("en-US", dateStyles));
               let availability = null;
               try {
                 availability = await getAvail(user, startDate, endDate);
@@ -103,7 +110,7 @@ rtm.on('message', async (event) => {
               // TODO: make this an options menu
               // let message = Object.assign({},defaultResponse,);
               // if(!availability){
-              let myEvents = await getEvents(event.user, startDate);
+              let myEvents = await getEvents(event.user, new Date(startDate));
               myEvents = myEvents.map((date) => {
                 return { text: date, value: date }
               });
@@ -136,7 +143,7 @@ rtm.on('message', async (event) => {
               console.log(names, userIDs, emails);
               botResponse.attachments = [
                 {
-                  "title": "Time Conflicts", 
+                  "title": "Time Conflicts",
                   "fields": [
                     {
                       "title": "With Whom",
@@ -145,7 +152,7 @@ rtm.on('message', async (event) => {
                     },
                     {
                       "title": "Proposed Time",
-                      "value": `${startDate.toLocaleDateString()}-${endDate.toLocaleDateString()}`,
+                      "value": `${startDate.toLocaleDateString("en-US", dateStyles)}-${endDate.toLocaleDateString("en-US", dateStyles)}`,
                       // "value" : { startDate, endDate }
                     }
                   ]
@@ -349,7 +356,7 @@ rtm.on('message', async (event) => {
   }
 });
 
-
+// TODO helper function that generates meeting message 
 
 
 app.post('/slack/actions', (req,res) => {
