@@ -4,6 +4,7 @@
 'use strict';
 import { google } from 'googleapis';
 import { getUserInfoByID } from './routes';
+import _ from 'underscore';
 
 const OAuth2Client = google.auth.OAuth2;
 const keys = require('./client_secret.json').web;
@@ -99,32 +100,33 @@ router.get(REDIRECT_URL, (req, res) => {
  TEMPLATE FOR HOW TO GET EVENTS
 */
 const getEvents = async (slackID, startDate) => {
+    const MIN_HR = 7;
+    const MAX_HR = 23;
+
     let user = await User.findOne({ slackID: slackID }).exec();
     let tokens = decryptGoogleCalAuth(user.googleCalAuth);
     oauth2Client.setCredentials(tokens);
+
+    const month = startDate.getMonth() + 1;
+    const day = startDate.getDate();
+    const year = startDate.getFullYear();
+
     const calendar = google.calendar({version: 'v3', auth: oauth2Client})
-    console.log(calendar);
     calendar.events.list({
       calendarId: 'primary',
-      timeMin: (new Date()).toISOString(),
-      maxResults: 10,
-      singleEvents: true,
-      orderBy: 'startTime',
+      timeMin: new Date(startDate.setHours(MIN_HR)).toISOString(),
+      timeMax: new Date(startDate.setHours(MAX_HR)).toISOString(),
     }, (err, data) => {
       if (err) return console.log('The API returned an error: ' + err);
       const events = data.data.items;
       if (events.length) {
-        console.log('Upcoming 10 events:');
-        console.log(events[3]);
-        const temp = events.map((event, i) => {
-        const start = event.start.dateTime || event.start.date;
-          console.log(`${start} - ${event.summary}`);
-          return `${start} - ${event.summary}`;
-        });
-        // return temp;
+        const conflictHrs = events.map(event => new Date(event.start.dateTime).getHours());
+        const filteredHrs = _.range(MIN_HR,MAX_HR).filter(hr => !conflictHrs.includes(hr));
+
+        console.log(filteredHrs.map(hr => `${year}-${month}-${day} ${hr}:00`));
+        return filteredHrs.map(hr => `${year}-${month}-${day} ${hr}:00`);
       } else {
         console.log('No upcoming events found.');
-        // return 'No upcoming events found.';
       }
     })
 }
@@ -251,9 +253,9 @@ const createMeeting = async (user, params) => {
     date.setSeconds(times[2]);
     let endDate = new Date(date);
     endDate.setHours(date.getHours() + 1);
-    console.log('inside createMeeting, user: ', user);
-    console.log('email ? ',user.email);
-    console.log(`date: ${date.toISOString()}, endDate: ${endDate.toISOString()}`)
+    // console.log('inside createMeeting, user: ', user);
+    // console.log('email ? ',user.email);
+    // console.log(`date: ${date.toISOString()}, endDate: ${endDate.toISOString()}`)
     oauth2Client.setCredentials(decryptGoogleCalAuth(user.googleCalAuth));
     let availability = await getAvail(date.toLocaleString(), endDate.toLocaleString(), user.email);
     console.log('availability : ', availability);
