@@ -99,15 +99,23 @@ router.get(REDIRECT_URL, (req, res) => {
 const getEvents = async (slackID, startDate) => {
     const MIN_HR = 7;
     const MAX_HR = 23;
-
+    const daysOfTheWeek = [
+      'Sun',
+      'Mon',
+      'Tue',
+      'Wed',
+      'Thu',
+      'Fri',
+      'Sat',
+    ];
     let user = await User.findOne({ slackID: slackID }).exec();
     let tokens = decryptGoogleCalAuth(user.googleCalAuth);
     oauth2Client.setCredentials(tokens);
 
     const month = startDate.getMonth() + 1;
     const day = startDate.getDate();
-    const year = startDate.getFullYear();
-
+    // const year = startDate.getFullYear();
+    const dayOfWeek = daysOfTheWeek[startDate.getDay()];
     // const calendar = google.calendar({version: 'v3', auth: oauth2Client})
     return new Promise((resolve, reject) => {
       calendar.events.list({
@@ -125,8 +133,8 @@ const getEvents = async (slackID, startDate) => {
           const conflictHrs = events.map(event => new Date(event.start.dateTime).getHours());
           const filteredHrs = _.range(MIN_HR,MAX_HR).filter(hr => !conflictHrs.includes(hr));
 
-          console.log(filteredHrs.map(hr => `${year}-${month}-${day} ${hr}:00`));
-          resolve(filteredHrs.map(hr => `${year}-${month}-${day} ${hr}:00`));
+          console.log(filteredHrs.map(hr => `${dayOfWeek}, ${month}-${day} ${hr}:00`));
+          resolve(filteredHrs.map(hr => `${dayOfWeek}, ${month}-${day} ${hr}:00`));
         } else {
           console.log('No upcoming events found.');
         }
