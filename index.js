@@ -5,7 +5,10 @@ const { RTMClient, WebClient } = require('@slack/client');
 import { generateAuthCB, googleRoutes, getEvents, setReminder, getAvail } from './google';
 import { getUserEmailByID } from './routes';
 import axios from 'axios';
-const app = express();
+const request = require('request')
+const bodyParser = require('body-parser')
+const app = express()
+app.use(bodyParser.urlencoded({ extended: false }));
 app.use('/', googleRoutes);
 import apiai from 'apiai';
 
@@ -163,15 +166,54 @@ rtm.on('message', async (event) => {
               web.chat.postMessage({
                 "channel": event.channel,
                 "as_user" : true,
-                "attachments": [{
-                  "text": response.result.fulfillment.speech,
-                  "fallback": "Unable to confirm a Reminder or Meeting",
-                  "callback_id": "confirm",
-                  "actions": [
-                    { "type": "button", "name": "select", "value": "yes", "text": "Confirm" },
-                    { "type": "button", "name": "select", "value": "no", "text": "Cancel", "style": "danger" }
-                  ]
-                }]
+                "text": "Scheduling Confirmation",
+                "attachments": [
+                  {
+                    "title": "${name of the event}",
+                    "fields": [
+                      {
+                        "title": "Date",
+                        "value": "{date}",
+                        "short": true
+                      },
+                      {
+                        "title": "Time",
+                        "value": "{time}",
+                        "short": true
+                      },
+                      {
+                        "title": "With",
+                        "value": "{people}",
+                        "short": true
+                      }
+                    ]
+                  },
+                  {
+                    "title": "Hey!",
+                    "text": "I have created your event!"
+                  },
+                  {
+                    "fallback": "Are you sure you want me to add this to your calendar?",
+                    "title": "Are you sure you want me to add this to your calendar?",
+                    "callback_id": "comic_1234_xyz",
+                    "color": "#3AA3E3",
+                    "attachment_type": "default",
+                    "actions": [
+                      {
+                        "name": "yes",
+                        "text": "Yes",
+                        "type": "button",
+                        "value": "confirm"
+                      },
+                      {
+                        "name": "no",
+                        "text": "No",
+                        "type": "button",
+                        "value": "no"
+                      }
+                    ]
+                  }
+                ]
               }, (err, res) => {
                 if(err) {
                   console.error(err);
@@ -216,7 +258,9 @@ rtm.on('message', async (event) => {
 });
 
 
-
+app.post('/slack/actions', (req,res) => {
+  console.log(req.body);
+})
 /*
 * listen here
 */
