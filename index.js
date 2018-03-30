@@ -91,7 +91,7 @@ rtm.on('message', async (event) => {
               startDate.setMinutes(times[1]);
               startDate.setSeconds(times[2]);
               let endDate = new Date(new Date(startDate).setHours(startDate.getHours()+1));
-              console.log(startDate, typeof startDate);
+              console.log(startDate.toLocaleDateString(), endDate.toLocaleDateString());
               let availability = null;
               try {
                 availability = await getAvail(user, startDate, endDate);
@@ -107,10 +107,49 @@ rtm.on('message', async (event) => {
               myEvents = myEvents.map((date) => {
                 return { text: date, value: date }
               });
-              console.log(myEvents);
-              botResponse.text = "*Time Conflicts*";
-              botResponse.mrkdwn = true;
+              // console.log(myEvents);
+              // botResponse.text = "*Time Conflicts*";
+              botResponse.response_type = "in_channel";
+              // botResponse.mrkdwn = true;
+              let slackIDs = response.result.parameters.invitees.map((invitee) =>
+                invitee.split('@').map(user => {
+                  if(user.length > 8){
+                    return user.slice(0,9)
+                  }
+                }).filter((thing) => !!thing)
+              ).reduce((acc, x) => acc.concat(x), []);
+              console.log(slackIDs);
+              let userIDs = [];
+              let names = [];
+              let emails = await Promise.all(slackIDs.map( async (slackID, index) => {
+                // slackID = slackID.replace(/[\@\<\>]/g,'');
+                let _user = await User.findOne({ slackID }).exec();
+                if(!_user){
+                  const user_info = await getUserInfoByID(slackID);
+                  _user = await User.findOrCreate(slackID, user_info.email, user_info.name);
+                }
+                names.push(_user.name);
+                userIDs.push(_user._id);
+                // title += index === invitees.length ? `and ${_user.name}` : `${_user.name}, `;
+                return { email: _user.email };
+              }));
+              console.log(names, userIDs, emails);
               botResponse.attachments = [
+                {
+                  "title": "Time Conflicts", 
+                  "fields": [
+                    {
+                      "title": "With Whom",
+                      "value": slackIDs.map(slackID => `<@${slackID}>`).join(', '),
+                      // "value": { emails, userIDs }
+                    },
+                    {
+                      "title": "Proposed Time",
+                      "value": `${startDate.toLocaleDateString()}-${endDate.toLocaleDateString()}`,
+                      // "value" : { startDate, endDate }
+                    }
+                  ]
+                },
                 {
                   "text": "Choose a time that conflicts",
                   "color": "#3AA3E3",
@@ -314,10 +353,10 @@ rtm.on('message', async (event) => {
 
 
 app.post('/slack/actions', (req,res) => {
-    res.status(200).end()
-    console.log(JSON.parse(req.body.payload));
+    res.status(200).end();
+    console.log('payload: ', JSON.parse(req.body.payload));
     const { callback_id, actions, user, channel, original_message } = JSON.parse(req.body.payload);
-
+    console.log('actions: ',actions[0].selected_options);
     if(actions[0].name !== "confirm") { return; }
     let botResponse = {channel: channel.id, subtype: 'bot_message', as_user: true}
     switch(callback_id){
@@ -327,11 +366,16 @@ app.post('/slack/actions', (req,res) => {
           .then(() => {
               botResponse.text = "I\'ve successfully updated your calendar";
               web.chat.postMessage(botResponse);
+              return;
           })
           .catch(error => {
             botResponse.text = `hmm I got this error when trying to add reminder:\n${typeof error === 'object' ? JSON.stringify(error) : error}`;
-            web.chat.postMessage(botResponse)
-          })
+            web.chat.postMessage(botResponse);
+            return;
+          });
+
+      // case "timeConflictsChoice":
+      //   let parameters =
     }
 })
 /*
