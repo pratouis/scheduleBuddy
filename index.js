@@ -53,46 +53,38 @@ const defaultResponse = {
 rtm.on('message', async (event) => {
   // For structure of `event`, see https://api.slack.com/events/reaction_added
   if(event.subtype || event.bot_id) { return; }
-  console.log(event);
   try {
     let user = await User.findOne({ slackID: event.user });
-    console.log('user: ', user);
     if(!user){
       console.log('user not found!');
       const user_info = await getUserInfoByID(event.user);
       user = await User.findOrCreate(event.user, user_info.email, user_info.name);
     }
 
-    // getEvents(event.user, new Date());
-    // let user = await User.findOrCreate(event.user);
+
     let botResponse = Object.assign({}, defaultResponse, {channel: event.channel});
     const request = test.textRequest(event.text, {
       sessionId: event.user
     });
-    console.log('SLACKID : ',event.user);
-    // console.log('found user');
+
     request.on('response', async function(response) {
         // console.log('response.result: ', response.result);
         if(response.result.metadata.intentName === 'meeting.add' || response.result.action === 'reminder.add'){
           if(!user.googleCalAuth)
           {
-            console.log('not authorized?');
+            console.error('not authorized?!!');
             botResponse.text = `I need your permission to access google calendar: ${generateAuthCB(event.user)}`;
             rtm.addOutgoingEvent(false, 'message', botResponse);
             return;
           }
 
-          console.log('what to send back: ', response.result.fulfillment.speech);
-          console.log('currently recorded params: ', response.result.parameters);
-          console.log('this conversation is not yet complete: ', response.result.actionIncomplete);
+          // console.log('what to send back: ', response.result.fulfillment.speech);
+          // console.log('currently recorded params: ', response.result.parameters);
+          // console.log('this conversation is not yet complete: ', response.result.actionIncomplete);
 
           if(!response.result.actionIncomplete) {
-            // console.log('messages: ',response.result.fulfillment.messages);
-            //Add a google calendar event with [invitees, day, time] as params
-            //& [subject, location] as optional params
-            // console.log(response.result.metadata.intentName, response.result.metadata.intentName === 'meeting.add')
             if(response.result.metadata.intentName === 'meeting.add') {
-              console.log('meeting to use this info: ', response.result);
+              // console.log('meeting to use this info: ', response.result);
 
               let { invitees, day, time, subject, location } = response.result.parameters;
               let startDate = new Date(day.replace(/-/g, '/'));
@@ -101,24 +93,25 @@ rtm.on('message', async (event) => {
               startDate.setMinutes(times[1]);
               startDate.setSeconds(times[2]);
               let endDate = new Date(new Date(startDate).setHours(startDate.getHours()+1));
-              console.log(startDate.toLocaleDateString("en-US", dateStyles), endDate.toLocaleDateString("en-US", dateStyles));
               let availability = null;
               try {
                 availability = await getAvail(user, startDate, endDate);
-                console.log(availability)
+                console.log('availablity: ', availability)
               } catch (err){
                 console.error(err);
                 return;
               }
               // TODO: make this an options menu
               // let message = Object.assign({},defaultResponse,);
-              let slackIDs = response.result.parameters.invitees.map((invitee) =>
-              invitee.split('@').map(user => {
-                if(user.length > 8){
-                  return user.slice(0,9)
-                }
-              }).filter((thing) => !!thing)
-            ).reduce((acc, x) => acc.concat(x), []);
+              let slackIDs = response.result.parameters.invitees
+                .map((invitee) => invitee.split('@').map(user => {
+                  if(user.length > 8){
+                    return user.slice(0,9)
+                  }
+                })
+                .filter((thing) => !!thing))
+                .reduce((acc, x) => acc.concat(x), []);
+
               if(!availability){
                 let myEvents = await getEvents(event.user, new Date(startDate));
                 myEvents = myEvents.map((date) => {
@@ -174,10 +167,13 @@ rtm.on('message', async (event) => {
                     }]
                   }
                 ]
-                  web.chat.postMessage(botResponse);
-                  return;
-                }
-                botResponse.attachments = generateMeetingConfirmation(slackIDs.map(slackID => `<@${slackID}>`).join(', '), startDate, endDate)
+              } else {
+                console.log('available: sending Meeting Confirmation');
+                botResponse.attachments = generateMeetingConfirmation(slackIDs.map(slackID => `<@${slackID}>`).join(', '), startDate, endDate);
+              }
+              web.chat.postMessage(botResponse);
+              return;
+
               // } else {
               //   console.log('would create meeting here');
               //   // createMeeting(user, response.result.parameters);
@@ -355,6 +351,7 @@ rtm.on('message', async (event) => {
 
       request.end();
   } catch (err) {
+    console.log('caught error in rtm.on(message)');
     console.error(err);
   }
 });
@@ -415,15 +412,7 @@ app.post('/slack/actions', (req,res) => {
       case "reminderConfirm":
           if(actions[0].name === "confirm") {
             let parameters = original_message.attachments[0].fields.map(obj => obj.value);
-            setReminder(user.id, parameters)
-            .then(() => {
-              botResponse.text = "I\'ve successfully updated your calendar";
-              web.chat.postMessage(botResponse);
-            })
-            .catch(error => {
-              botResponse.text = `hmm I got this error when trying to add reminder:\n${typeof error === 'object' ? JSON.stringify(error) : error}`;
-              web.chat.postMessage(botResponse);
-            });
+            handleCreateEventPromise(setReminder(user.id, parameters), 0, botResponse);
           }
           return;
       case "timeConflictsChoice":
@@ -441,16 +430,34 @@ app.post('/slack/actions', (req,res) => {
           web.chat.postMessage(botResponse);
           return;
       case "meetingConfirm":
-          console.log('meeting Confirm: ',JSON.parse(req.body.payload));
           if(actions[0].name === "confirm") {
-            let parameters = original_message.attachments[0].fields.map((obj) => Object.keys(obj).join(', '));
-            console.log(parameters);
-            // conso
-            console.log(parameters);
+            let parameters = { slackID : user.id };
+            original_message.attachments[0].fields.forEach((obj) => {
+              if(obj.title.indexOf('Whom') > -1){
+                parameters.invitees = obj.value.split(', ').map((slackID) => slackID.replace(/[\@\<\>]/g,''));
+              }else{
+                const dates = obj.value.split('-');
+                parameters.startDate = dates[0];
+                parameters.endDate = dates[1];
+              }
+            });
+            // console.log('meeting Confirm parameters: ',parameters);
+            handleCreateEventPromise(createMeeting(parameters), 1, botResponse);
           }
           return;
     }
 })
+
+const handleCreateEventPromise = (promise, type, botResponse) => {
+  promise.then(() => {
+    botResponse.text = "I\'ve successfully updated your calendar";
+    web.chat.postMessage(botResponse);
+  }).catch(error => {
+    console.error('error caught in handling promise: ', error);
+    botResponse.text = `hmm I got this error when trying to add ${type ? 'meeting' : 'reminder'}:\n${typeof error === 'object' ? JSON.stringify(error) : error}`;
+    web.chat.postMessage(botResponse);
+  })
+}
 /*
 * listen here
 */
