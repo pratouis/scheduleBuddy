@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { getUserInfoByID } from '../routes';
+
 const userSchema = mongoose.Schema({
   email: {
     type: String,

@@ -60,7 +60,8 @@ rtm.on('message', async (event) => {
     const request = test.textRequest(event.text, {
       sessionId: event.user
     });
-    getAvail(event.user);
+    // getAvail(event.user);
+    // getEvents(event.user);
     request.on('response', function(response) {
       console.log('response result: ', response);
         if(response.result.metadata.intentName === 'meeting.add' || response.result.action === 'reminder.add'){
@@ -80,13 +81,14 @@ rtm.on('message', async (event) => {
 
           //TO-DO: Google calendar handling once all parameters are filled out
           if(!response.result.actionIncomplete) {
-            console.log('messages: ',response.result.fulfillment.messages);
+            // console.log('messages: ',response.result.fulfillment.messages);
             //Add a google calendar event with [invitees, day, time] as params
             //& [subject, location] as optional params
             // console.log(response.result.metadata.intentName, response.result.metadata.intentName === 'meeting.add')
             if(response.result.metadata.intentName === 'meeting.add') {
               console.log('meeting to use this info: ', response.result);
-              createMeeting(event.user, response.result.parameters);
+              // let getAvail = await getAvail(slackID);
+              createMeeting(user, response.result.parameters);
             }
 
             //Add a google calendar event with [date, subject] -> as params
