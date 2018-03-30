@@ -35,6 +35,15 @@ const web = new WebClient(process.env.BOT_SLACK_TOKEN);
 /* WEBHOOK needed to communicate with slack server and slack server to our app */
 const currentTime = new Date().toTimeString();
 
+const dateStyles = {
+  weekday: 'short',
+  month: 'long',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  year: 'numeric',
+};
+
 const defaultResponse = {
   reply_broadcast: true,
   subtype: 'bot_message',
@@ -84,13 +93,7 @@ rtm.on('message', async (event) => {
             // console.log(response.result.metadata.intentName, response.result.metadata.intentName === 'meeting.add')
             if(response.result.metadata.intentName === 'meeting.add') {
               console.log('meeting to use this info: ', response.result);
-              const dateStyles = {
-                weekday: 'short',
-                month: 'long',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-              };
+
               let { invitees, day, time, subject, location } = response.result.parameters;
               let startDate = new Date(day.replace(/-/g, '/'));
               let times = time.split(':');
@@ -109,72 +112,72 @@ rtm.on('message', async (event) => {
               }
               // TODO: make this an options menu
               // let message = Object.assign({},defaultResponse,);
-              // if(!availability){
-              let myEvents = await getEvents(event.user, new Date(startDate));
-              myEvents = myEvents.map((date) => {
-                return { text: date, value: date }
-              });
-              // console.log(myEvents);
-              // botResponse.text = "*Time Conflicts*";
-              botResponse.response_type = "in_channel";
-              // botResponse.mrkdwn = true;
               let slackIDs = response.result.parameters.invitees.map((invitee) =>
-                invitee.split('@').map(user => {
-                  if(user.length > 8){
-                    return user.slice(0,9)
+              invitee.split('@').map(user => {
+                if(user.length > 8){
+                  return user.slice(0,9)
+                }
+              }).filter((thing) => !!thing)
+            ).reduce((acc, x) => acc.concat(x), []);
+              if(!availability){
+                let myEvents = await getEvents(event.user, new Date(startDate));
+                myEvents = myEvents.map((date) => {
+                  return { text: date, value: date }
+                });
+                botResponse.response_type = "in_channel";
+                console.log(slackIDs);
+              // let userIDs = [];
+              // let names = [];
+              // let emails = await Promise.all(slackIDs.map( async (slackID, index) => {
+              //   // slackID = slackID.replace(/[\@\<\>]/g,'');
+              //   let _user = await User.findOne({ slackID }).exec();
+              //   if(!_user){
+              //     const user_info = await getUserInfoByID(slackID);
+              //     _user = await User.findOrCreate(slackID, user_info.email, user_info.name);
+              //   }
+              //   names.push(_user.name);
+              //   userIDs.push(_user._id);
+              //   // title += index === invitees.length ? `and ${_user.name}` : `${_user.name}, `;
+              //   return { email: _user.email };
+              // }));
+              // console.log(names, userIDs, emails);
+                botResponse.attachments = [
+                  {
+                    "title": "Time Conflicts",
+                    "fields": [
+                      {
+                        "title": "With Whom",
+                        "value": slackIDs.map(slackID => `<@${slackID}>`).join(', '),
+                        // "value": { emails, userIDs }
+                      },
+                      {
+                        "title": "Proposed Time",
+                        "value": `${startDate.toLocaleDateString("en-US", dateStyles)}-${endDate.toLocaleDateString("en-US", dateStyles)}`,
+                        // "value" : { startDate, endDate }
+                      }
+                    ]
+                  },
+                  {
+                    "text": "Choose a time that conflicts",
+                    "color": "#3AA3E3",
+                    "attachment_type": "default",
+                    "fallback": "That time conflicts, here are other options: ",
+                    // "titled": "That time conflicts, here are other options: ",
+                    "callback_id": "timeConflictsChoice",
+                    "color": "#3AA3E3",
+                    "attachment_type": "default",
+                    "actions": [{
+                      "name": "pick_meeting_time",
+                      "text": "Pick a time...",
+                      "type": "select",
+                      "options": myEvents
+                    }]
                   }
-                }).filter((thing) => !!thing)
-              ).reduce((acc, x) => acc.concat(x), []);
-              console.log(slackIDs);
-              let userIDs = [];
-              let names = [];
-              let emails = await Promise.all(slackIDs.map( async (slackID, index) => {
-                // slackID = slackID.replace(/[\@\<\>]/g,'');
-                let _user = await User.findOne({ slackID }).exec();
-                if(!_user){
-                  const user_info = await getUserInfoByID(slackID);
-                  _user = await User.findOrCreate(slackID, user_info.email, user_info.name);
+                ]
+                  web.chat.postMessage(botResponse);
+                  return;
                 }
-                names.push(_user.name);
-                userIDs.push(_user._id);
-                // title += index === invitees.length ? `and ${_user.name}` : `${_user.name}, `;
-                return { email: _user.email };
-              }));
-              console.log(names, userIDs, emails);
-              botResponse.attachments = [
-                {
-                  "title": "Time Conflicts",
-                  "fields": [
-                    {
-                      "title": "With Whom",
-                      "value": slackIDs.map(slackID => `<@${slackID}>`).join(', '),
-                      // "value": { emails, userIDs }
-                    },
-                    {
-                      "title": "Proposed Time",
-                      "value": `${startDate.toLocaleDateString("en-US", dateStyles)}-${endDate.toLocaleDateString("en-US", dateStyles)}`,
-                      // "value" : { startDate, endDate }
-                    }
-                  ]
-                },
-                {
-                  "text": "Choose a time that conflicts",
-                  "color": "#3AA3E3",
-                  "attachment_type": "default",
-                  "fallback": "That time conflicts, here are other options: ",
-                  // "titled": "That time conflicts, here are other options: ",
-                  "callback_id": "timeConflictsChoice",
-                  "color": "#3AA3E3",
-                  "attachment_type": "default",
-                  "actions": [{
-                    "name": "pick_meeting_time",
-                    "text": "Pick a time...",
-                    "type": "select",
-                    "options": myEvents
-                  }]
-                }
-              ]
-                web.chat.postMessage(botResponse);
+                botResponse.attachments = generateMeetingConfirmation(slackIDs.map(slackID => `<@${slackID}>`).join(', '), startDate, endDate)
               // } else {
               //   console.log('would create meeting here');
               //   // createMeeting(user, response.result.parameters);
@@ -356,33 +359,96 @@ rtm.on('message', async (event) => {
   }
 });
 
-// TODO helper function that generates meeting message 
-
+// TODO helper function that generates meeting message
+const generateMeetingConfirmation = (users, startDate, endDate) => {
+  return [
+    {
+      "title": `Meeting Confirmation`,
+      "fields": [
+        {
+          "title": "With Whom",
+          "value": users
+        },
+        {
+          "title": "Date",
+          "value": `${startDate.toLocaleDateString("en-US", dateStyles)}-${endDate.toLocaleDateString("en-US", dateStyles)}`,
+        }
+      ]
+    },
+    {
+      "fallback": "Are you sure you want me to add this to your calendar?",
+      "title": "Are you sure you want me to add this to your calendar?",
+      "callback_id": "meetingConfirm",
+      "color": "#3AA3E3",
+      "attachment_type": "default",
+      "actions": [
+        {
+          "name": "confirm",
+          "text": "*confirm*",
+          "type": "button",
+          "value": "confirm",
+          "mrkdwn": true,
+        },
+        {
+          "name": "no",
+          "text": "no",
+          "type": "button",
+          "value": "no"
+        }
+      ]
+    }
+  ];
+}
 
 app.post('/slack/actions', (req,res) => {
     res.status(200).end();
-    console.log('payload: ', JSON.parse(req.body.payload));
     const { callback_id, actions, user, channel, original_message } = JSON.parse(req.body.payload);
-    console.log('actions: ',actions[0].selected_options);
-    if(actions[0].name !== "confirm") { return; }
+    // console.log('actions: ',actions[0].selected_options);
+    // console.log('callback_id: ', callback_id)
+
     let botResponse = {channel: channel.id, subtype: 'bot_message', as_user: true}
+    if(callback_id === 'timeConflictsChoice') {
+      console.log(callback_id)
+    }
+    console.log('callback_id: ', callback_id, typeof callback_id)
     switch(callback_id){
       case "reminderConfirm":
-          let parameters = original_message.attachments[0].fields.map(obj => obj.value);
-          setReminder(user.id, parameters)
-          .then(() => {
+          if(actions[0].name === "confirm") {
+            let parameters = original_message.attachments[0].fields.map(obj => obj.value);
+            setReminder(user.id, parameters)
+            .then(() => {
               botResponse.text = "I\'ve successfully updated your calendar";
               web.chat.postMessage(botResponse);
-              return;
-          })
-          .catch(error => {
-            botResponse.text = `hmm I got this error when trying to add reminder:\n${typeof error === 'object' ? JSON.stringify(error) : error}`;
-            web.chat.postMessage(botResponse);
-            return;
-          });
-
-      // case "timeConflictsChoice":
-      //   let parameters =
+            })
+            .catch(error => {
+              botResponse.text = `hmm I got this error when trying to add reminder:\n${typeof error === 'object' ? JSON.stringify(error) : error}`;
+              web.chat.postMessage(botResponse);
+            });
+          }
+          return;
+      case "timeConflictsChoice":
+          console.log('inside timeConflictsChoice');
+          const users = original_message.attachments[0].fields[0].value;
+          console.log('selected_options keys: ',Object.keys(actions[0].selected_options[0]));
+          console.log('actions: ',actions[0]);
+          // console.log(Object.keys(actions[0]));
+          const startDate = new Date(actions[0].selected_options[0].value);
+          console.log(typeof startDate);
+          console.log(startDate.toLocaleDateString('en-US', dateStyles));
+          const endDate = new Date(new Date(startDate).setHours(startDate.getHours() + 1));
+          botResponse.attachments = generateMeetingConfirmation(users, startDate, endDate);
+          console.log('about to post pack');
+          web.chat.postMessage(botResponse);
+          return;
+      case "meetingConfirm":
+          console.log('meeting Confirm: ',JSON.parse(req.body.payload));
+          if(actions[0].name === "confirm") {
+            let parameters = original_message.attachments[0].fields.map((obj) => Object.keys(obj).join(', '));
+            console.log(parameters);
+            // conso
+            console.log(parameters);
+          }
+          return;
     }
 })
 /*
