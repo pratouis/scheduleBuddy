@@ -442,6 +442,12 @@ app.post('/slack/actions', (req,res) => {
           return;
       case "meetingConfirm":
           console.log('meeting Confirm: ',JSON.parse(req.body.payload));
+          if(actions[0].name === "confirm") {
+            let parameters = original_message.attachments[0].fields.map((obj) => Object.keys(obj).join(', '));
+            console.log(parameters);
+            // conso
+            console.log(parameters);
+          }
           return;
     }
 })
