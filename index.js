@@ -1,17 +1,16 @@
 import mongoose from 'mongoose';
-const express = require('express');
 import { User } from './models/models';
 const { RTMClient, WebClient } = require('@slack/client');
 import { generateAuthCB, googleRoutes, getEvents, setReminder, getAvail, createMeeting } from './google';
 import { getUserInfoByID } from './routes';
 import axios from 'axios';
-const request = require('request')
-const bodyParser = require('body-parser')
-const app = express()
+import express from 'express';
+const request = require('request');
+const bodyParser = require('body-parser');
+const app = express();
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use('/', googleRoutes);
 import apiai from 'apiai';
-
 var test = apiai(process.env.APIAI_CLIENT_TOKEN);
 
 
@@ -24,7 +23,7 @@ mongoose.connect(process.env.MONGODB_URI);
 
 
 
-/* RTM API to be used to respond to messages ?
+/* RTM API to be used to respond to messages
 */
 const rtm = new RTMClient(process.env.BOT_SLACK_TOKEN);
 rtm.start();
@@ -53,14 +52,16 @@ rtm.on('message', async (event) => {
       const user_info = await getUserInfoByID(event.user);
       user = await User.findOrCreate(event.user, user_info.email, user_info.name);
     }
-    // let user = await User.findOrCreate(event.user, user_email);
+
+    // getEvents(event.user, new Date());
+    // let user = await User.findOrCreate(event.user);
     let botResponse = Object.assign({}, defaultResponse, {channel: event.channel});
     const request = test.textRequest(event.text, {
       sessionId: event.user
     });
     console.log('SLACKID : ',event.user);
     // console.log('found user');
-    request.on('response', function(response) {
+    request.on('response', async function(response) {
         // console.log('response.result: ', response.result);
         if(response.result.metadata.intentName === 'meeting.add' || response.result.action === 'reminder.add'){
           if(!user.googleCalAuth)
@@ -82,8 +83,59 @@ rtm.on('message', async (event) => {
             // console.log(response.result.metadata.intentName, response.result.metadata.intentName === 'meeting.add')
             if(response.result.metadata.intentName === 'meeting.add') {
               console.log('meeting to use this info: ', response.result);
-              // let getAvail = await getAvail(slackID);
-              createMeeting(user, response.result.parameters);
+              let { invitees, day, time, subject, location } = response.result.parameters;
+              let startDate = new Date(day.replace(/-/g, '/'));
+              let times = time.split(':');
+              startDate.setHours(times[0]);
+              startDate.setMinutes(times[1]);
+              startDate.setSeconds(times[2]);
+              let endDate = new Date(new Date(startDate).setHours(startDate.getHours()+1));
+              let availability = null;
+              try {
+                availability = await getAvail(user, startDate, endDate);
+                console.log(availability)
+              } catch (err){
+                console.error(err);
+                return;
+              }
+              // TODO: make this an options menu
+              // let message = Object.assign({},defaultResponse,);
+              // if(!availability){
+                botResponse.text = "*Time Conflicts*";
+                botResponse.mrkdwn = true;
+                botResponse.attachments = [
+                  {
+                    "title": `${subject || 'Meeting'}`,
+                    "pretext": 'please choose another time'
+                  },
+                  {
+                    "text": "Choose a time that conflicts",
+                    "color": "#3AA3E3",
+                    "attachment_type": "default",
+                    "fallback": "That time conflicts, here are other options: ",
+                    "title": "That time conflicts, here are other options: ",
+                    "callback_id": "timeConflictsChoice",
+                    "color": "#3AA3E3",
+                    "attachment_type": "default",
+                    "actions": [{
+                      "name": "pick_meeting_time",
+                      "text": "Pick a time...",
+                      "type": "select",
+                      "options": getEvents(event.user, startDate).map((date) => {
+                        return { text: date, value: date }
+                      })
+                    }]
+                  }
+                ]
+                web.chat.postMessage(botResponse);
+              // } else {
+              //   console.log('would create meeting here');
+              //   // createMeeting(user, response.result.parameters);
+              // }
+              /*
+              TODO : decide on flow of info
+              - check availability - then
+              */
             }
 
             //Add a google calendar event with [date, subject] -> as params
@@ -202,8 +254,6 @@ rtm.on('message', async (event) => {
 
         console.log("buddy's response: ", botResponse);
         console.log("type: ", response.result.metadata.intentName);
-        //how to check whether this line is working???
-        // web.chat.postMessage(botResponse);
         rtm.addOutgoingEvent(response.result.actionIncomplete, 'message', botResponse);
 
       })
@@ -220,28 +270,24 @@ rtm.on('message', async (event) => {
 });
 
 
+
+
 app.post('/slack/actions', (req,res) => {
     res.status(200).end()
     const { callback_id, actions, user, channel, original_message } = JSON.parse(req.body.payload);
     if(actions[0].name !== "confirm") { return; }
+    let botResponse = {channel: channel.id, subtype: 'bot_message', as_user: true}
     switch(callback_id){
       case "reminderConfirm":
           let parameters = original_message.attachments[0].fields.map(obj => obj.value);
-          // console.log(parameters);
-          setReminder(user.id, parameters).then(() => {
-              web.chat.postMessage({
-              "channel": channel.id,
-              "subtype": 'bot_message',
-              "as_user" : true,
-              "text": "I\'ve successfully updated your calendar"
-            })
-          }).catch(error => {
-            web.chat.postMessage({
-              "channel": channel.id,
-              "subtype": 'bot_message',
-              "as_user": true,
-              "text": `hmm I got this error when trying to add reminder:\n${error}`
-            })
+          setReminder(user.id, parameters)
+          .then(() => {
+              botResponse.text = "I\'ve successfully updated your calendar";
+              web.chat.postMessage(botResponse);
+          })
+          .catch(error => {
+            botResponse.text = `hmm I got this error when trying to add reminder:\n${typeof error === 'object' ? JSON.stringify(error) : error}`;
+            web.chat.postMessage(botResponse)
           })
     }
 })
