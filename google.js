@@ -158,51 +158,46 @@ const getAvail = async (startDate, endDate, email) => {
 }
 
 const setReminder = async (slackID, params) => {
-    let { date, subject } = params;
-    date = date.replace(/-/g, '/');
-    let user = await User.findOne({ slackID }).exec();
-    const tokens = decryptGoogleCalAuth(user.googleCalAuth);
-    oauth2Client.setCredentials(tokens);
-    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-    const event = {
-      'summary': subject,
-      'start': {
-        'date': new Date(date).toLocaleDateString(),
-        'timeZone': 'America/Los_Angeles'
-      },
-      'end': {
-        'date': new Date(date).toLocaleDateString(),
-        'timeZone': 'America/Los_Angeles'
-      }
-    }
-    // return new Promise((resolve, reject) => {
-    calendar.events.insert({
-      calendarId: 'primary',
-      resource: event,
-    }, (err, gEvent) => {
-      if(err){
+      try {
+        let date = new Date(params[0].replace(/-/g, '/'));
+        let user = await User.findOne({ slackID }).exec();
+        oauth2Client.setCredentials(decryptGoogleCalAuth(user.googleCalAuth));
+        const event = {
+          'summary': params[1],
+          'start': {
+            'date': date.toLocaleDateString(),
+            'timeZone': 'America/Los_Angeles'
+          },
+          'end': {
+            'date': date.toLocaleDateString(),
+            'timeZone': 'America/Los_Angeles'
+          }
+        };
+        return new Promise((resolve, reject) =>{
+          calendar.events.insert({
+            auth: oauth2Client,
+            calendarId: 'primary',
+            resource: event,
+          }, (err, gEvent) => {
+            if(err) {
+              console.error(err);
+              throw err;
+            } else {
+              const newReminder = new Reminder({
+                eventID: gEvent.data.id,
+                day: date.toISOString(),
+                subject: params[1],
+                userID: user._id
+              });
+              newReminder.save()
+              .then((rem) => resolve({ success: true }))
+              .catch(err => reject(err));
+            }
+          });
+        })
+      } catch(err) {
         console.error(err);
-      }else{
-        console.log('Event created: %s', gEvent.data.htmlLink);
-        const newReminder = new Reminder({
-          eventID: gEvent.data.id,
-          day: date,
-          subject,
-          userID: user._id
-        });
-        newReminder.save().then((reminder) =>
-          console.log(reminder)
-        ).catch((err) => console.error(err));
       }
-
-      // err ? reject(err) : resolve(event.data.status)
-
-      // return !!err || event.data.status;
-      // }else{
-      //   console.log(event.data)
-      // }
-    });
-  // })
 }
 
 // const setClient = (slackID) => {
