@@ -108,9 +108,9 @@ rtm.on('message', async (event) => {
                 return { text: date, value: date }
               });
               // console.log(myEvents);
-              botResponse.text = "*Time Conflicts*";
+              // botResponse.text = "*Time Conflicts*";
               botResponse.response_type = "in_channel";
-              botResponse.mrkdwn = true;
+              // botResponse.mrkdwn = true;
               let slackIDs = response.result.parameters.invitees.map((invitee) =>
                 invitee.split('@').map(user => {
                   if(user.length > 8){
@@ -136,15 +136,16 @@ rtm.on('message', async (event) => {
               console.log(names, userIDs, emails);
               botResponse.attachments = [
                 {
+                  "title": "Time Conflicts", 
                   "fields": [
                     {
                       "title": "With Whom",
-                      "value": names.join(', '),
+                      "value": slackIDs.map(slackID => `<@${slackID}>`).join(', '),
                       // "value": { emails, userIDs }
                     },
                     {
                       "title": "Proposed Time",
-                      "value": `${startDate.toLocaleString()}-${endDate.toLocaleString()}`,
+                      "value": `${startDate.toLocaleDateString()}-${endDate.toLocaleDateString()}`,
                       // "value" : { startDate, endDate }
                     }
                   ]
