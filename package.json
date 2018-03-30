@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "nodemon index.js --exec babel-node --presets es2015,stage-2"
+    "test": "nodemon index.js --exec babel-node --presets es2015,stage-2",
+    "start": "babel-node index.js --presets es2015,stage-2"
   },
   "repository": {
     "type": "git",
@@ -20,7 +21,14 @@
     "@slack/client": "^4.1.0",
     "apiai": "^4.0.3",
     "axios": "^0.18.0",
-    "google-auth-library": "^0.12.0"
+    "body-parser": "^1.18.2",
+    "crypto": "^1.0.1",
+    "express": "^4.16.3",
+    "google-auth-library": "^0.12.0",
+    "googleapis": "^27.0.0",
+    "mongoose": "^5.0.11",
+    "request": "^2.85.0",
+    "underscore": "^1.8.3"
   },
   "devDependencies": {
     "babel-cli": "^6.26.0",
