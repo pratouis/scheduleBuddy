@@ -108,23 +108,30 @@ const getEvents = async (slackID, startDate) => {
     const day = startDate.getDate();
     const year = startDate.getFullYear();
 
-    const calendar = google.calendar({version: 'v3', auth: oauth2Client})
-    calendar.events.list({
-      calendarId: 'primary',
-      timeMin: new Date(startDate.setHours(MIN_HR)).toISOString(),
-      timeMax: new Date(startDate.setHours(MAX_HR)).toISOString(),
-    }, (err, data) => {
-      if (err) return console.log('The API returned an error: ' + err);
-      const events = data.data.items;
-      if (events.length) {
-        const conflictHrs = events.map(event => new Date(event.start.dateTime).getHours());
-        const filteredHrs = _.range(MIN_HR,MAX_HR).filter(hr => !conflictHrs.includes(hr));
+    // const calendar = google.calendar({version: 'v3', auth: oauth2Client})
+    return new Promise((resolve, reject) => {
+      calendar.events.list({
+        auth: oauth2Client,
+        calendarId: 'primary',
+        timeMin: new Date(startDate.setHours(MIN_HR)).toISOString(),
+        timeMax: new Date(startDate.setHours(MAX_HR)).toISOString(),
+      }, (err, data) => {
+        if (err) {
+          console.log('The API returned an error: ' + err);
+          reject(err)
+        }
+        const events = data.data.items;
+        if (events.length) {
+          const conflictHrs = events.map(event => new Date(event.start.dateTime).getHours());
+          const filteredHrs = _.range(MIN_HR,MAX_HR).filter(hr => !conflictHrs.includes(hr));
 
-        console.log(filteredHrs.map(hr => `${year}-${month}-${day} ${hr}:00`));
-        return filteredHrs.map(hr => `${year}-${month}-${day} ${hr}:00`);
-      } else {
-        console.log('No upcoming events found.');
-      }
+          console.log(filteredHrs.map(hr => `${year}-${month}-${day} ${hr}:00`));
+          resolve(filteredHrs.map(hr => `${year}-${month}-${day} ${hr}:00`));
+        } else {
+          console.log('No upcoming events found.');
+        }
+      })
+
     })
 }
 

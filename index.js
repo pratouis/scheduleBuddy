@@ -38,6 +38,7 @@ const currentTime = new Date().toTimeString();
 const defaultResponse = {
   reply_broadcast: true,
   subtype: 'bot_message',
+  as_user: true,
 }
 
 rtm.on('message', async (event) => {
@@ -90,6 +91,7 @@ rtm.on('message', async (event) => {
               startDate.setMinutes(times[1]);
               startDate.setSeconds(times[2]);
               let endDate = new Date(new Date(startDate).setHours(startDate.getHours()+1));
+              console.log(startDate, typeof startDate);
               let availability = null;
               try {
                 availability = await getAvail(user, startDate, endDate);
@@ -101,32 +103,31 @@ rtm.on('message', async (event) => {
               // TODO: make this an options menu
               // let message = Object.assign({},defaultResponse,);
               // if(!availability){
-                botResponse.text = "*Time Conflicts*";
-                botResponse.mrkdwn = true;
-                botResponse.attachments = [
-                  {
-                    "title": `${subject || 'Meeting'}`,
-                    "pretext": 'please choose another time'
-                  },
-                  {
-                    "text": "Choose a time that conflicts",
-                    "color": "#3AA3E3",
-                    "attachment_type": "default",
-                    "fallback": "That time conflicts, here are other options: ",
-                    "title": "That time conflicts, here are other options: ",
-                    "callback_id": "timeConflictsChoice",
-                    "color": "#3AA3E3",
-                    "attachment_type": "default",
-                    "actions": [{
-                      "name": "pick_meeting_time",
-                      "text": "Pick a time...",
-                      "type": "select",
-                      "options": getEvents(event.user, startDate).map((date) => {
-                        return { text: date, value: date }
-                      })
-                    }]
-                  }
-                ]
+              let myEvents = await getEvents(event.user, startDate);
+              myEvents = myEvents.map((date) => {
+                return { text: date, value: date }
+              });
+              console.log(myEvents);
+              botResponse.text = "*Time Conflicts*";
+              botResponse.mrkdwn = true;
+              botResponse.attachments = [
+                {
+                  "text": "Choose a time that conflicts",
+                  "color": "#3AA3E3",
+                  "attachment_type": "default",
+                  "fallback": "That time conflicts, here are other options: ",
+                  // "titled": "That time conflicts, here are other options: ",
+                  "callback_id": "timeConflictsChoice",
+                  "color": "#3AA3E3",
+                  "attachment_type": "default",
+                  "actions": [{
+                    "name": "pick_meeting_time",
+                    "text": "Pick a time...",
+                    "type": "select",
+                    "options": myEvents
+                  }]
+                }
+              ]
                 web.chat.postMessage(botResponse);
               // } else {
               //   console.log('would create meeting here');
@@ -197,50 +198,90 @@ rtm.on('message', async (event) => {
               console.log(botResponse);
               */
               // setReminder(event.user, response.result.parameters.subject, response.result.parameters.date.replace(/-/g, '/'));
-
-              web.chat.postMessage({
-                "channel": event.channel,
-                "subtype": 'bot_message',
-                "as_user" : true,
-                "text": "Scheduling Confirmation",
-                "attachments": [
-                  {
-                    "title": `Reminder`,
-                    "fields": [
-                      {
-                        "title": "Date",
-                        "value": `${response.result.parameters.date}`,
-                      },
-                      {
-                        "title": "What",
-                        "value": `${response.result.parameters.subject}`
-                      }
-                    ]
-                  },
-                  {
-                    "fallback": "Are you sure you want me to add this to your calendar?",
-                    "title": "Are you sure you want me to add this to your calendar?",
-                    "callback_id": "reminderConfirm",
-                    "color": "#3AA3E3",
-                    "attachment_type": "default",
-                    "actions": [
-                      {
-                        "name": "confirm",
-                        "text": "*confirm*",
-                        "type": "button",
-                        "value": "confirm",
-                        "mrkdwn": true,
-                      },
-                      {
-                        "name": "no",
-                        "text": "no",
-                        "type": "button",
-                        "value": "no"
-                      }
-                    ]
-                  }
-                ]
-              });
+              botResponse.text = "Scheduling Confirmation";
+              botResponse.attachments = [
+                {
+                  "title": `Reminder`,
+                  "fields": [
+                    {
+                      "title": "Date",
+                      "value": `${response.result.parameters.date}`,
+                    },
+                    {
+                      "title": "What",
+                      "value": `${response.result.parameters.subject}`
+                    }
+                  ]
+                },
+                {
+                  "fallback": "Are you sure you want me to add this to your calendar?",
+                  "title": "Are you sure you want me to add this to your calendar?",
+                  "callback_id": "reminderConfirm",
+                  "color": "#3AA3E3",
+                  "attachment_type": "default",
+                  "actions": [
+                    {
+                      "name": "confirm",
+                      "text": "*confirm*",
+                      "type": "button",
+                      "value": "confirm",
+                      "mrkdwn": true,
+                    },
+                    {
+                      "name": "no",
+                      "text": "no",
+                      "type": "button",
+                      "value": "no"
+                    }
+                  ]
+                }
+              ];
+              /*
+              {
+              "channel": event.channel,
+              "subtype": 'bot_message',
+              "as_user" : true,
+              "text": "Scheduling Confirmation",
+              "attachments": [
+                {
+                  "title": `Reminder`,
+                  "fields": [
+                    {
+                      "title": "Date",
+                      "value": `${response.result.parameters.date}`,
+                    },
+                    {
+                      "title": "What",
+                      "value": `${response.result.parameters.subject}`
+                    }
+                  ]
+                },
+                {
+                  "fallback": "Are you sure you want me to add this to your calendar?",
+                  "title": "Are you sure you want me to add this to your calendar?",
+                  "callback_id": "reminderConfirm",
+                  "color": "#3AA3E3",
+                  "attachment_type": "default",
+                  "actions": [
+                    {
+                      "name": "confirm",
+                      "text": "*confirm*",
+                      "type": "button",
+                      "value": "confirm",
+                      "mrkdwn": true,
+                    },
+                    {
+                      "name": "no",
+                      "text": "no",
+                      "type": "button",
+                      "value": "no"
+                    }
+                  ]
+                }
+              ]
+            }
+              */
+              web.chat.postMessage(botResponse);
               return;
             }
           } else {
@@ -274,7 +315,9 @@ rtm.on('message', async (event) => {
 
 app.post('/slack/actions', (req,res) => {
     res.status(200).end()
+    console.log(JSON.parse(req.body.payload));
     const { callback_id, actions, user, channel, original_message } = JSON.parse(req.body.payload);
+
     if(actions[0].name !== "confirm") { return; }
     let botResponse = {channel: channel.id, subtype: 'bot_message', as_user: true}
     switch(callback_id){
