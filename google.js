@@ -4,26 +4,28 @@
 'use strict';
 import { google } from 'googleapis';
 import { getUserInfoByID } from './routes';
+// import crypto from 'crypto';
 import _ from 'underscore';
-
-const OAuth2Client = google.auth.OAuth2;
-const keys = require('./client_secret.json').web;
+import { User, Reminder, Meeting, Invite } from './models/models';
+import { encryptGoogleCalAuth, decryptGoogleCalAuth } from './security';
 const express = require('express');
 const router = new express.Router();
-import crypto from 'crypto';
 
-import { User, Reminder, Meeting, Invite } from './models/models';
-
-const calendar = google.calendar({ version: 'v3'});
+const keys = require('./client_secret.json').web;
 const CLIENT_ID = keys.client_id;
 const CLIENT_SECRET = keys.client_secret;
 const REDIRECT_URL = "/oauthcb";
 
-const oauth2Client = new OAuth2Client(CLIENT_ID,
-  CLIENT_SECRET, keys.redirect_uris[0]);
+const calendar = google.calendar({ version: 'v3'});
+const OAuth2Client = google.auth.OAuth2;
+const oauth2Client = new OAuth2Client(CLIENT_ID,CLIENT_SECRET, keys.redirect_uris[0]);
 
-/*
-* documentation: https://www.npmjs.com/package/googleapis#generating-an-authentication-url
+/* generates authentication URL for a user to grant schedulerbuddy permission
+*     to access and write to the user's calendar
+*     @param slackID - sets query param state of redirect URL
+*     return: URL
+*
+*     documentation: https://www.npmjs.com/package/googleapis#generating-an-authentication-url
 */
 const generateAuthCB = (slackID) => {
   return oauth2Client.generateAuthUrl({
@@ -33,57 +35,33 @@ const generateAuthCB = (slackID) => {
     state: slackID, // state is a query param passed to redirect_uri,
   })
 }
+/************************************************************/
 
-/*
+/* google calendar authorization callback
+*   purpose: endpoint for Google to send authorization tokens
+*            store encrypted tokens in mongoDB associated with user
+*   @req.query.code: authorization code to request tokens from google
+*   @req.query.state: slackID of user who's granting permission to access their calendar
 *
+*   helper functions: encryptGoogleCalAuth - encryption of tokens
+*
+*   respond with 401 if google sends us an error;
+*   respond with 500 if we are unable to save user to DB
+*   respond with 200 upon successfully receiving tokens and updating mongoDB
 */
-const hashCal = (gCalAUTH) => {
-  const hash = crypto.createHash('md5');
-  hash.update(gCalAUTH);
-  return hash.digest('hex');
-}
-
-/* buffer must be 16 for hex, and key must fit */
-const buffers = {
-    iv: Buffer.from(process.env.ENCRYPTION_IV, "hex"),
-    key: new Buffer(process.env.ENCRYPTION_KEY),
-}
-
-const encryptGoogleCalAuth = (tokens) => {
-  let text = ""
-  try {
-    text = JSON.stringify(tokens);
-    let cipher = crypto.createCipheriv("aes128", buffers.key, buffers.iv);
-    let result = cipher.update(text, "utf8", "hex");
-    result += cipher.final("hex");
-    return result;
-  }catch (err) {
-    console.error(err)
-    return text;
-  }
-}
-
-const decryptGoogleCalAuth = (text) => {
-  let decipher = crypto.createDecipheriv("aes128", buffers.key, buffers.iv);
-  let result = decipher.update(text, "hex");
-  result += decipher.final();
-  return JSON.parse(result);
-}
-
 router.get(REDIRECT_URL, (req, res) => {
-  oauth2Client.getToken(req.query.code, (err, token) => {
+  oauth2Client.getToken(req.query.code, (err, tokens) => {
     if(err) {
-      console.error('error in retrieving token: ',err)
-      res.status(500).json(err);
+      console.error('error in retrieving tokens: ',err)
+      res.status(401).json(err);
+      return;
     }
-    // const encryptTokens = token;
-    const encryptTokens = encryptGoogleCalAuth(token);
     User.findOneAndUpdate(
       { slackID: req.query.state },
-      { $set: { "googleCalAuth": encryptTokens } },
+      { $set: { "googleCalAuth": encryptGoogleCalAuth(tokens) } },
       { new: true }
     ).then((user) => {
-      res.status(200).json(token);
+      res.status(200).send('Thanks for allowing schedulerBuddy to access your calendar\nGo back to Slack to schedule meetings and reminders');
     }).catch((err) => {
       console.error('error in updating user: ',err);
       res.status(500).send(err);
@@ -91,7 +69,7 @@ router.get(REDIRECT_URL, (req, res) => {
   });
 });
 
-// const testEncryption
+
 
 /*
  TEMPLATE FOR HOW TO GET EVENTS
@@ -143,25 +121,32 @@ const getEvents = async (slackID, startDate) => {
     })
 }
 
-// const getPrimaryID = () => {
-//   const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-//   calendar.calendarList.list({}, (err, data) => {
-//     if(err){
-//       console.log('err: ', err);
-//       return;
-//     } else {
-//       console.log('data from getPrimaryID: ', data.data.items);
-//       return;
-//     }
-//   })
-// }
 
-const getAvail = async (user, startDate, endDate) => {
+/* getAvail - returns promise based on whether user has conflicts with datetime
+*     @param user - mongoDB user object
+*     @param startDate - start of event
+*     @param endDate - end of event
+*
+*     returns Promise
+*        - rejects if error from freebusy
+*        - resolves with boolean based on response from freebusy.query
+*     helper functions: decryptGoogleCalAuth
+*     uses global variables oauth2Client and calendar
+*/
+
+// TODO: change getAvail to a better name across entire project
+const getAvail = (user, startDate, endDate) => {
   return new Promise( (resolve, reject) => {
+      // set credentials using decrypted user tokens
       oauth2Client.setCredentials(decryptGoogleCalAuth(user.googleCalAuth));
-      // const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-      console.log(startDate.toString(), endDate.toString());
+      /* though freebusy is poorly documented (https://developers.google.com/calendar/v3/reference/freebusy)
+      *   it can be used to determine if a user has an event scheduled during
+      *   a specified time interval.
+      */
       calendar.freebusy.query({
+        // use oauth2Client for authentication, and send object with calendarID,
+        //      time interval and timezone
+        // see query structure at https://developers.google.com/calendar/v3/reference/freebusy/query
         auth: oauth2Client,
         resource: {
           items: [{'id': user.email}],
@@ -171,45 +156,67 @@ const getAvail = async (user, startDate, endDate) => {
         }
       }, (err, res) => {
         if(err){
-          console.error(err);
+          console.error('error in freebusy.query: ',err);
           reject(err);
         }else {
-          console.log(res.data.calendars[user.email]);
+          // return true if the length of the busy object is 0, false otherwise
           resolve(!!!res.data.calendars[user.email].busy.length);
         }
       })
   });
 }
 
-const setReminder = async (slackID, params) => {
+/* setReminder - creates reminder on google calendar and in mongoDB
+*   @params slackID - ID associated with slack user who is creating reminder
+*   @params payload - parameters returned from dialogFlow
+*
+*   returns Promise
+*     - rejects with err if
+*           - unable to find user by slackID
+*           - unsuccessful save to google calendar
+*           - unsuccessful save to mongodb
+*     - resolves if succesfully saves to google calendar and mongodb
+*/
+const setReminder = async (slackID, payload) => {
       try {
-        let date = new Date(params[0].replace(/-/g, '/'));
+        // format date to proper JS Date object syntax
+        let date = new Date(payload[0].replace(/-/g, '/'));
+        // find user using slackID
         let user = await User.findOne({ slackID }).exec();
+        // throw an error if user is not found
+        if(!user) throw 'no user found in mongoDB';
+        // set credentials for oauth2Client connection using user's decrypted credentials
         oauth2Client.setCredentials(decryptGoogleCalAuth(user.googleCalAuth));
-        const event = {
-          'summary': params[1],
-          'start': {
-            'date': date.toLocaleDateString(),
-            'timeZone': 'America/Los_Angeles'
-          },
-          'end': {
-            'date': date.toLocaleDateString(),
-            'timeZone': 'America/Los_Angeles'
-          }
-        };
-        return new Promise((resolve, reject) =>{
+        // rename second parameter for readability
+        let task = payload[1];
+
+        return new Promise((resolve, reject) => {
+          // insert event into main (primary) calendar with authentication credentials,
+          // resource is the event structure
+          // see event structure at https://developers.google.com/calendar/v3/reference/events
           calendar.events.insert({
             auth: oauth2Client,
             calendarId: 'primary',
-            resource: event,
+            resource: {
+              'summary': task,
+              'start': {
+                'date': date.toLocaleDateString(),
+                'timeZone': 'America/Los_Angeles'
+              },
+              'end': {
+                'date': date.toLocaleDateString(),
+                'timeZone': 'America/Los_Angeles'
+              }
+            },
           }, (err, gEvent) => {
             if(err) {
               reject(err);
             } else {
+              // create reminder document with eventID matching the ID returned from google
               const newReminder = new Reminder({
                 eventID: gEvent.data.id,
                 day: date.toISOString(),
-                subject: params[1],
+                subject: task,
                 userID: user._id
               });
               newReminder.save()
@@ -220,14 +227,11 @@ const setReminder = async (slackID, params) => {
         })
       } catch(err) {
         console.error(err);
+        return new Promise ((resolve, reject) => reject(err));
       }
 }
 
-// const setClient = (slackID) => {
-//   let user = await User.findOne({ slackID }).exec();
-//   const tokens = decryptGoogleCalAuth(user.googleCalAuth);
-//   oauth2Client.setCredentials(tokens);
-// }
+
 const createInvite = (inviteeID, eventID, hostID) => {
   const invite = new Invite({
     eventID,
@@ -239,63 +243,91 @@ const createInvite = (inviteeID, eventID, hostID) => {
 }
 
 
-const createMeeting = async (params) => {
+/*  createMeeting - creates a meeting on google calendar and in mongoDB
+*   @params payload - object passed from interactive message including meeting details
+*
+*   returns promise
+*       - rejects with error if
+*           - user no longer available
+*           - no emails associated with slack accounts
+*           - unsuccessful save in google calendar
+*           - unsuccessful save in mongoDB
+*       - resolves with saved meeting details if successful saves in google calendar and mongoDB
+*/
+const createMeeting = async (payload) => {
     try {
-      let { slackID, invitees, startDate, endDate } = params;
+      // destructure payload
+      /* slackID - ID associated with slack user
+      * invitees - array of slack IDs to be invited
+      * startDate - start date string of meeting
+      * endDate - end date string of meeting
+      */
+      let { slackID, invitees, startDate, endDate } = payload;
+      // convert startDate and endDate to date objects
       startDate = new Date(startDate);
       endDate = new Date(endDate);
+      // find user in mongoDB by slackID
       let user = await User.findOne({ slackID }).exec();
-      // oauth2Client.setCredentials(decryptGoogleCalAuth(user.googleCalAuth));
+      // throw error if user not found in DB
+      if(!user) throw 'no user found in mongoDB';
+      // Note: availablity sets credentials of global variable oauth2Client
+      //    so we do not need to do so here.  This is a poor security feature
       let availability = await getAvail(user, startDate, endDate);
-      if(!availability) {
-        return new Promise((resolve, request) => {
-          reject({availability: availability});
-        })
-      }
+      if(!availability) throw `user <@${slackID}> not available as of ${new Date(Date.now()).toLocaleString()}`;
+      // Note: for future, storing mongoDB userIDs to send invites out to each user
       let userIDs = [];
-      let title = "meeting with ";
+      // NOTE: to be changed in future
+      // crafting title since AI is inconsistent with getting subject
+      let title = `meeting hosted by ${user.name} with `;
+      // getting emails, names, and mongoDB userID of each slack user
       let emails = await Promise.all(invitees.map( async (invitee, index) => {
-        invitee = invitee.replace(/[\@\<\>]/g,'');
+        // get user using slackID
         let _user = await User.findOne({ slackID: invitee }).exec();
         if(!_user){
+          // if user doesn't exist, create user in mongodB
+          //    using information fetched from slack's API
           const user_info = await getUserInfoByID(invitee);
           _user = await User.findOrCreate(invitee, user_info.email, user_info.name);
         }
+        // push mongoDB ID into userID array
         userIDs.push(_user._id);
+        // concat user's name with title
         title += index === invitees.length ? `and ${_user.name}` : `${_user.name}, `;
+        // return object with key 'email' and value of user.email as required
+        //    by google calendar API events https://developers.google.com/calendar/v3/reference/events
         return { email: _user.email };
       }));
 
-      if(!emails){
-        throw `no emails found! invitees: ${invitees.toString()}`;
-      }
+      // throw an error if no emails found from invitees slackIDs
+      if(!emails) throw `no emails found! invitees: ${invitees.toString()}`;
 
-      const event = {
-        'summary': title,
-        'start' : {
-          'dateTime': startDate.toISOString(),
-          'timeZone': 'America/Los_Angeles'
-        },
-        'end' : {
-          'dateTime': endDate.toISOString(),
-          'timeZone': 'America/Los_Angeles'
-        },
-        'attendees': emails
-      };
 
       return new Promise((resolve, reject) => {
+        // insert event into main (primary) calendar with authentication credentials,
+        // resource is the event structure
+        // see event structure at https://developers.google.com/calendar/v3/reference/events
         calendar.events.insert({
           auth: oauth2Client,
           calendarId: 'primary',
-          resource: event
+          resource: {
+            'summary': title,
+            'start' : {
+              'dateTime': startDate.toISOString(),
+              'timeZone': 'America/Los_Angeles'
+            },
+            'end' : {
+              'dateTime': endDate.toISOString(),
+              'timeZone': 'America/Los_Angeles'
+            },
+            'attendees': emails
+          }
         }, (err, gEvent) => {
           if(err) {
             reject(err);
           } else {
-            console.log('calendar created in google');
+            // create meeting model with eventID matching event returned from google
             const newMeeting = new Meeting({
               eventID: gEvent.data.id,
-              // day: ,
               subject: title,
               time: {
                 start: startDate,
@@ -305,9 +337,11 @@ const createMeeting = async (params) => {
               userID: user._id,
               invitees: userIDs
             });
+            // save meeting in MONGODB
             newMeeting.save()
             .then((meeting) => {
-              console.log('calendar created in mongodb');
+              // Note: for future use, returning this information to send out
+              //        invites and confirmations to invitees
               resolve({ invitees: userIDs,
                 hostID: user._id,
                 eventID: gEvent.data.id,
@@ -316,7 +350,7 @@ const createMeeting = async (params) => {
               });
             })
             .catch(err => {
-              console.log('error in mongodb: ', err);
+              console.error('error in mongodb: ', err);
               reject(err)
             });
           }
