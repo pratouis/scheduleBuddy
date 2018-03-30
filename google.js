@@ -214,7 +214,7 @@ const setReminder = async (slackID, params) => {
               });
               newReminder.save()
               .then((rem) => resolve({ success: true }))
-              .catch(err => reject(err));
+              .catch(err => console.log(err));
             }
           });
         })
