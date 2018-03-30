@@ -62,10 +62,10 @@ const meetingSchema = mongoose.Schema({
     type: String,
     default: ''
   },
-  day: {
-    type: Date,
-    required: true,
-  },
+  // day: {
+  //   type: Date,
+  //   required: true,
+  // },
   time: {
     start : {
       type: Date,

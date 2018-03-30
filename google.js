@@ -108,9 +108,8 @@ const getEvents = async (slackID, startDate) => {
       'Fri',
       'Sat',
     ];
-    let user = await User.findOne({ slackID: slackID }).exec();
-    let tokens = decryptGoogleCalAuth(user.googleCalAuth);
-    oauth2Client.setCredentials(tokens);
+    let user = await User.findOne({ slackID }).exec();
+    oauth2Client.setCredentials(decryptGoogleCalAuth(user.googleCalAuth));
 
     const month = startDate.getMonth() + 1;
     const day = startDate.getDate();
@@ -131,6 +130,7 @@ const getEvents = async (slackID, startDate) => {
         const events = data.data.items;
         if (events.length) {
           const conflictHrs = events.map(event => new Date(event.start.dateTime).getHours());
+          console.log('conflicting hours: ',conflictHrs);
           const filteredHrs = _.range(MIN_HR,MAX_HR).filter(hr => !conflictHrs.includes(hr));
 
           console.log(filteredHrs.map(hr => new Date(new Date(startDate).setHours(hr)).toLocaleString()));
@@ -160,6 +160,7 @@ const getAvail = async (user, startDate, endDate) => {
   return new Promise( (resolve, reject) => {
       oauth2Client.setCredentials(decryptGoogleCalAuth(user.googleCalAuth));
       // const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+      console.log(startDate.toString(), endDate.toString());
       calendar.freebusy.query({
         auth: oauth2Client,
         resource: {
@@ -169,7 +170,13 @@ const getAvail = async (user, startDate, endDate) => {
          'timeZone': 'America/Los_Angeles',
         }
       }, (err, res) => {
-        (err) ? reject(err) : resolve(!!!res.data.calendars[user.email].busy.length);
+        if(err){
+          console.error(err);
+          reject(err);
+        }else {
+          console.log(res.data.calendars[user.email]);
+          resolve(!!!res.data.calendars[user.email].busy.length);
+        }
       })
   });
 }
@@ -232,101 +239,93 @@ const createInvite = (inviteeID, eventID, hostID) => {
 }
 
 
-const createMeeting = async (user, params) => {
-  // return new Promise((resolve, reject) => {
+const createMeeting = async (params) => {
     try {
-      let { invitees, day, time, subject, location } = params;
-      let date = new Date(day.replace(/-/g, '/'));
-      let times = time.split(':');
-      date.setHours(times[0]);
-      date.setMinutes(times[1]);
-      date.setSeconds(times[2]);
-      let endDate = new Date(new Date(date).setHours(date.getHours()+1));
-      oauth2Client.setCredentials(decryptGoogleCalAuth(user.googleCalAuth));
-      let availability = await getAvail(date.toLocaleString(), endDate.toLocaleString(), user.email);
+      let { slackID, invitees, startDate, endDate } = params;
+      startDate = new Date(startDate);
+      endDate = new Date(endDate);
+      let user = await User.findOne({ slackID }).exec();
+      // oauth2Client.setCredentials(decryptGoogleCalAuth(user.googleCalAuth));
+      let availability = await getAvail(user, startDate, endDate);
       if(!availability) {
         return new Promise((resolve, request) => {
           reject({availability: availability});
         })
       }
-      invitees = invitees.map((invitee) =>
-      invitee.split('@').map(user => {
-        if(user.length > 8){
-          return user.slice(0,9)
+      let userIDs = [];
+      let title = "meeting with ";
+      let emails = await Promise.all(invitees.map( async (invitee, index) => {
+        invitee = invitee.replace(/[\@\<\>]/g,'');
+        let _user = await User.findOne({ slackID: invitee }).exec();
+        if(!_user){
+          const user_info = await getUserInfoByID(invitee);
+          _user = await User.findOrCreate(invitee, user_info.email, user_info.name);
         }
-      }).filter((thing) => !!thing)
-    ).reduce((acc, x) => acc.concat(x), []);
-    // console.log('invitees: ', invitees);
-    let title = "meeting with ";
-    // let user = null;
-    let userIDs = [];
-    let emails = await Promise.all(invitees.map( async (invitee, index) => {
-      invitee = invitee.replace(/[\@\<\>]/g,'');
-      let _user = await User.findOne({ slackID: invitee }).exec();
-      if(!_user){
-        const user_info = await getUserInfoByID(invitee);
-        _user = await User.findOrCreate(invitee, user_info.email, user_info.name);
+        userIDs.push(_user._id);
+        title += index === invitees.length ? `and ${_user.name}` : `${_user.name}, `;
+        return { email: _user.email };
+      }));
+
+      if(!emails){
+        throw `no emails found! invitees: ${invitees.toString()}`;
       }
-      userIDs.push(_user._id);
-      title += index === invitees.length ? `and ${_user.name}` : `${_user.name}, `;
-      return { email: _user.email };
-    }));
-    if(!emails){
-      throw `no emails found! invitees: ${invitees.toString()}`;
-    }
 
-    const event = {
-      'summary': subject || title,
-      'location': location,
-      'start' : {
-        'dateTime': date.toISOString(),
-        'timeZone': 'America/Los_Angeles'
-      },
-      'end' : {
-        'dateTime': endDate.toISOString(),
-        'timeZone': 'America/Los_Angeles'
-      },
-      'attendees': emails
-    };
-    const newMeeting = new Meeting({
-      eventID: gEvent.data.id,
-      day,
-      subject,
-      time: {
-        start: date,
-        end: endDate,
-      },
-      status: 'confirmed',
-      userID: user._id,
-      invitees: userIDs
-    });
+      const event = {
+        'summary': title,
+        'start' : {
+          'dateTime': startDate.toISOString(),
+          'timeZone': 'America/Los_Angeles'
+        },
+        'end' : {
+          'dateTime': endDate.toISOString(),
+          'timeZone': 'America/Los_Angeles'
+        },
+        'attendees': emails
+      };
 
-    return new Promise((resolve, reject) => {
-      calendar.events.insert({
-        auth: oauth2Client,
-        calendarId: 'primary',
-        resource: event
-      }, (err, gEvent) => {
-        if(err) {
-          reject(err);
-        } else {
-          newMeeting.save()
-          .then((meeting) => {
-            resolve({ invitees: userIDs,
-              hostID: user._id,
+      return new Promise((resolve, reject) => {
+        calendar.events.insert({
+          auth: oauth2Client,
+          calendarId: 'primary',
+          resource: event
+        }, (err, gEvent) => {
+          if(err) {
+            reject(err);
+          } else {
+            console.log('calendar created in google');
+            const newMeeting = new Meeting({
               eventID: gEvent.data.id,
-              meetingID: meeting._id,
-              eventLink: gEvent.data.htmlLink,
+              // day: ,
+              subject: title,
+              time: {
+                start: startDate,
+                end: endDate,
+              },
+              status: 'confirmed',
+              userID: user._id,
+              invitees: userIDs
             });
-          })
-          .catch(err => reject(err));
-        }
-      })
+            newMeeting.save()
+            .then((meeting) => {
+              console.log('calendar created in mongodb');
+              resolve({ invitees: userIDs,
+                hostID: user._id,
+                eventID: gEvent.data.id,
+                meetingID: meeting._id,
+                eventLink: gEvent.data.htmlLink,
+              });
+            })
+            .catch(err => {
+              console.log('error in mongodb: ', err);
+              reject(err)
+            });
+          }
+        })
 
-    })
+      })
     } catch(err) {
       console.error(err);
-      return { error: err };
+      return new Promise( (resolove, reject) => reject(err));
     }
 }
 
