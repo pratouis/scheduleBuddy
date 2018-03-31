@@ -176,7 +176,6 @@ const getAvail = (user, startDate, endDate) => {
 *     - resolves if succesfully saves to google calendar and mongodb
 */
 const setReminder = async (slackID, payload) => {
-      console.log('payload in setReminder: ', payload);
       try {
         // format date to proper JS Date object syntax
         let date = new Date(payload[1].replace(/-/g, '/'));
