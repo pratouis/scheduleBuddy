@@ -106,10 +106,8 @@ const getEvents = async (slackID, startDate) => {
         const events = data.data.items;
         if (events.length) {
           const conflictHrs = events.map(event => new Date(event.start.dateTime).getHours());
-          console.log('conflicting hours: ',conflictHrs);
           const filteredHrs = _.range(MIN_HR,MAX_HR).filter(hr => !conflictHrs.includes(hr));
 
-          console.log(filteredHrs.map(hr => new Date(new Date(startDate).setHours(hr)).toLocaleString()));
           resolve(filteredHrs.map(hr => new Date(new Date(startDate).setHours(hr)).toLocaleString()));
         } else {
           console.log('No upcoming events found.');
