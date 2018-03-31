@@ -113,71 +113,52 @@ rtm.on('message', async (event) => {
                 .reduce((acc, x) => acc.concat(x), []);
 
               if(!availability){
+
                 let myEvents = await getEvents(event.user, new Date(startDate));
+
                 myEvents = myEvents.map((date) => {
+
                   return { text: date, value: date }
                 });
                 botResponse.response_type = "in_channel";
-                console.log(slackIDs);
-              // let userIDs = [];
-              // let names = [];
-              // let emails = await Promise.all(slackIDs.map( async (slackID, index) => {
-              //   // slackID = slackID.replace(/[\@\<\>]/g,'');
-              //   let _user = await User.findOne({ slackID }).exec();
-              //   if(!_user){
-              //     const user_info = await getUserInfoByID(slackID);
-              //     _user = await User.findOrCreate(slackID, user_info.email, user_info.name);
-              //   }
-              //   names.push(_user.name);
-              //   userIDs.push(_user._id);
-              //   // title += index === invitees.length ? `and ${_user.name}` : `${_user.name}, `;
-              //   return { email: _user.email };
-              // }));
-              // console.log(names, userIDs, emails);
-                botResponse.attachments = [
-                  {
-                    "title": "Time Conflicts",
-                    "fields": [
-                      {
-                        "title": "With Whom",
-                        "value": slackIDs.map(slackID => `<@${slackID}>`).join(', '),
-                        // "value": { emails, userIDs }
-                      },
-                      {
-                        "title": "Proposed Time",
-                        "value": `${startDate.toLocaleDateString("en-US", dateStyles)}-${endDate.toLocaleDateString("en-US", dateStyles)}`,
-                        // "value" : { startDate, endDate }
-                      }
-                    ]
-                  },
-                  {
-                    "text": "Choose a time that conflicts",
-                    "color": "#3AA3E3",
-                    "attachment_type": "default",
-                    "fallback": "That time conflicts, here are other options: ",
-                    // "titled": "That time conflicts, here are other options: ",
-                    "callback_id": "timeConflictsChoice",
-                    "color": "#3AA3E3",
-                    "attachment_type": "default",
-                    "actions": [{
-                      "name": "pick_meeting_time",
-                      "text": "Pick a time...",
-                      "type": "select",
-                      "options": myEvents
-                    }]
-                  }
-                ]
+                //console.log(slackIDs);
+                botResponse.attachments = generateMeetingConfirmation(slackIDs.map(slackID => `<@${slackID}>`).join(', '), startDate, endDate, "Meeting", response, true, myEvents)
+                // [
+                //   {
+                //     "title": "Time Conflicts",
+                //     "fields": [
+                //       {
+                //         "title": "With Whom",
+                //         "value": slackIDs.map(slackID => `<@${slackID}>`).join(', '),
+                //       },
+                //       {
+                //         "title": "Proposed Time",
+                //         "value": `${startDate.toLocaleDateString("en-US", dateStyles)}-${endDate.toLocaleDateString("en-US", dateStyles)}`,
+                //       }
+                //     ]
+                //   },
+                //   {
+                //     "text": "Choose a time that conflicts",
+                //     "color": "#3AA3E3",
+                //     "attachment_type": "default",
+                //     "fallback": "That time conflicts, here are other options: ",
+                //     "callback_id": "timeConflictsChoice",
+                //     "color": "#3AA3E3",
+                //     "attachment_type": "default",
+                //     "actions": [{
+                //       "name": "pick_meeting_time",
+                //       "text": "Pick a time...",
+                //       "type": "select",
+                //       "options": myEvents
+                //     }]
+                //   }
+                // ]
               } else {
                 console.log('available: sending Meeting Confirmation');
-                botResponse.attachments = generateMeetingConfirmation(slackIDs.map(slackID => `<@${slackID}>`).join(', '), startDate, endDate);
+                botResponse.attachments = generateMeetingConfirmation(slackIDs.map(slackID => `<@${slackID}>`).join(', '), startDate, endDate, "Meeting", null, null, null);
               }
               web.chat.postMessage(botResponse);
               return;
-
-              // } else {
-              //   console.log('would create meeting here');
-              //   // createMeeting(user, response.result.parameters);
-              // }
               /*
               TODO : decide on flow of info
               - check availability - then
@@ -187,146 +168,54 @@ rtm.on('message', async (event) => {
             //Add a google calendar event with [date, subject] -> as params
             if (response.result.action === 'reminder.add') {
               console.log('inside reminder.add');
-              /*let confirm = {
-                "text": "Scheduling Confirmation",
-                "attachments": [
-                  {
-                    "title": "${name of the event}",
-                    "pretext": "can this work?",
-                    "fields": [
-                      {
-                        "title": "Date",
-                        "value": "{date}",
-                        "short": true
-                      },
-                      {
-                        "title": "Time",
-                        "value": "{time}",
-                        "short": true
-                      },
-                      {
-                        "title": "With",
-                        "value": "{people}",
-                        "short": true
-                      }
-                    ]
-                  },
-                  {
-                    "title": "Hey!",
-                    "text": "I have created your event!"
-                  },
-                  {
-                    "fallback": "Are you sure you want me to add this to your calendar?",
-                    "title": "Are you sure you want me to add this to your calendar?",
-                    "callback_id": "comic_1234_xyz",
-                    "color": "#3AA3E3",
-                    "attachment_type": "default",
-                    "actions": [
-                      {
-                        "name": "yes",
-                        "text": "Yes",
-                        "type": "button",
-                        "value": "confirm"
-                      },
-                      {
-                        "name": "no",
-                        "text": "No",
-                        "type": "button",
-                        "value": "no"
-                      }
-                    ]
-                  }
-                ]
-              };
-
+              /*
               const resp = Object.assign({}, confirm, {channel: event.channel});
               console.log(botResponse);
               */
-              // setReminder(event.user, response.result.parameters.subject, response.result.parameters.date.replace(/-/g, '/'));
               botResponse.text = "Scheduling Confirmation";
-              botResponse.attachments = [
-                {
-                  "title": `Reminder`,
-                  "fields": [
-                    {
-                      "title": "Date",
-                      "value": `${response.result.parameters.date}`,
-                    },
-                    {
-                      "title": "What",
-                      "value": `${response.result.parameters.subject}`
-                    }
-                  ]
-                },
-                {
-                  "fallback": "Are you sure you want me to add this to your calendar?",
-                  "title": "Are you sure you want me to add this to your calendar?",
-                  "callback_id": "reminderConfirm",
-                  "color": "#3AA3E3",
-                  "attachment_type": "default",
-                  "actions": [
-                    {
-                      "name": "confirm",
-                      "text": "*confirm*",
-                      "type": "button",
-                      "value": "confirm",
-                      "mrkdwn": true,
-                    },
-                    {
-                      "name": "no",
-                      "text": "no",
-                      "type": "button",
-                      "value": "no"
-                    }
-                  ]
-                }
-              ];
-              /*
-              {
-              "channel": event.channel,
-              "subtype": 'bot_message',
-              "as_user" : true,
-              "text": "Scheduling Confirmation",
-              "attachments": [
-                {
-                  "title": `Reminder`,
-                  "fields": [
-                    {
-                      "title": "Date",
-                      "value": `${response.result.parameters.date}`,
-                    },
-                    {
-                      "title": "What",
-                      "value": `${response.result.parameters.subject}`
-                    }
-                  ]
-                },
-                {
-                  "fallback": "Are you sure you want me to add this to your calendar?",
-                  "title": "Are you sure you want me to add this to your calendar?",
-                  "callback_id": "reminderConfirm",
-                  "color": "#3AA3E3",
-                  "attachment_type": "default",
-                  "actions": [
-                    {
-                      "name": "confirm",
-                      "text": "*confirm*",
-                      "type": "button",
-                      "value": "confirm",
-                      "mrkdwn": true,
-                    },
-                    {
-                      "name": "no",
-                      "text": "no",
-                      "type": "button",
-                      "value": "no"
-                    }
-                  ]
-                }
-              ]
-            }
-              */
-              web.chat.postMessage(botResponse);
+              botResponse.attachments = generateMeetingConfirmation(null, null, null, "Reminder", response, false)
+              // [
+              //   {
+              //     "title": `Reminder`,
+              //     "fields": [
+              //       {
+              //         "title": "Date",
+              //         "value": `${response.result.parameters.date}`,
+              //       },
+              //       {
+              //         "title": "What",
+              //         "value": `${response.result.parameters.subject}`
+              //       }
+              //     ]
+              //   },
+              //   {
+              //     "fallback": "Are you sure you want me to add this to your calendar?",
+              //     "title": "Are you sure you want me to add this to your calendar?",
+              //     "callback_id": "reminderConfirm",
+              //     "color": "#3AA3E3",
+              //     "attachment_type": "default",
+              //     "actions": [
+              //       {
+              //         "name": "confirm",
+              //         "text": "*confirm*",
+              //         "type": "button",
+              //         "value": "confirm",
+              //         "mrkdwn": true,
+              //       },
+              //       {
+              //         "name": "no",
+              //         "text": "no",
+              //         "type": "button",
+              //         "value": "no"
+              //       }
+              //     ]
+              //   }
+              // ];
+              console.log('botResponse: ', botResponse);
+              web.chat.postMessage(botResponse, (err, res) => {
+                if(err) console.error(err)
+                else console.log(res)
+              });
               return;
             }
           } else {
@@ -357,28 +246,59 @@ rtm.on('message', async (event) => {
 });
 
 // TODO helper function that generates meeting message
-const generateMeetingConfirmation = (users, startDate, endDate) => {
+/*
+*   @params eventType: 'Meeting' or 'Reminder'
+*   @params response: dialogFlow
+*   @params conflict: boolean of availability
+*
+*/
+const generateMeetingConfirmation = (users, startDate, endDate, eventType, response, conflict, evs) => {
+  // console.log("users", users)
+  // console.log("eventType", eventType)
+  // if(eventType === "Meeting"){
+  //   console.log("startdate: ", startDate.toLocaleDateString("en-US", dateStyles));
+  //   console.log('enddate: ', endDate.toLocaleDateString("en-US", dateStyles));
+  //
+  // }else{
+  //   console.log('date: ', response.result.parameters.date);
+  // }
+  if(startDate-(1000*60*60*4) < new Date() && eventType == "Meeting") {
+    return [{
+      "title": "You cannot schedule less than 4 hours ahead."
+    }];
+  }
   return [
     {
-      "title": `Meeting Confirmation`,
+      "title": conflict ? `Time Conflicts`: `${eventType} Confirmation`,
       "fields": [
+        eventType === "Reminder" ?
         {
-          "title": "With Whom",
-          "value": users
+          "title": "What",
+          "value": `${response.result.parameters.subject}`
+        } : {
+            "title": "With Whom",
+            "value": users
         },
         {
           "title": "Date",
-          "value": `${startDate.toLocaleDateString("en-US", dateStyles)}-${endDate.toLocaleDateString("en-US", dateStyles)}`,
-        }
+          "value": eventType==="Reminder" ? `${response.result.parameters.date}`:
+          `${startDate.toLocaleDateString("en-US", dateStyles)}-${endDate.toLocaleDateString("en-US", dateStyles)}`,
+        },
       ]
     },
     {
-      "fallback": "Are you sure you want me to add this to your calendar?",
-      "title": "Are you sure you want me to add this to your calendar?",
-      "callback_id": "meetingConfirm",
+      "fallback": conflict ? "That time conflicts, here are other options: ":"Are you sure you want me to add this to your calendar?",
+      "title": conflict ? "Choose a time that does not conflict" : "Are you sure you want me to add this to your calendar?",
+      "callback_id": conflict ? "timeConflictsChoice": `${eventType.toLowerCase()}Confirm`,
       "color": "#3AA3E3",
       "attachment_type": "default",
-      "actions": [
+
+      "actions": conflict ? [{
+        "name": "pick_meeting_time",
+        "text": "Pick a time...",
+        "type": "select",
+        "options": evs
+      }] :[
         {
           "name": "confirm",
           "text": "*confirm*",
@@ -398,6 +318,7 @@ const generateMeetingConfirmation = (users, startDate, endDate) => {
 }
 
 app.post('/slack/actions', (req,res) => {
+    console.log('hello here');
     res.status(200).end();
     const { callback_id, actions, user, channel, original_message } = JSON.parse(req.body.payload);
     // console.log('actions: ',actions[0].selected_options);
@@ -425,7 +346,7 @@ app.post('/slack/actions', (req,res) => {
           console.log(typeof startDate);
           console.log(startDate.toLocaleDateString('en-US', dateStyles));
           const endDate = new Date(new Date(startDate).setHours(startDate.getHours() + 1));
-          botResponse.attachments = generateMeetingConfirmation(users, startDate, endDate);
+          botResponse.attachments = generateMeetingConfirmation(users, startDate, endDate, "Meeting");
           console.log('about to post pack');
           web.chat.postMessage(botResponse);
           return;

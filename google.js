@@ -4,7 +4,6 @@
 'use strict';
 import { google } from 'googleapis';
 import { getUserInfoByID } from './routes';
-// import crypto from 'crypto';
 import _ from 'underscore';
 import { User, Reminder, Meeting, Invite } from './models/models';
 import { encryptGoogleCalAuth, decryptGoogleCalAuth } from './security';
@@ -36,7 +35,6 @@ const generateAuthCB = (slackID) => {
   })
 }
 /************************************************************/
-
 /* google calendar authorization callback
 *   purpose: endpoint for Google to send authorization tokens
 *            store encrypted tokens in mongoDB associated with user
@@ -178,9 +176,10 @@ const getAvail = (user, startDate, endDate) => {
 *     - resolves if succesfully saves to google calendar and mongodb
 */
 const setReminder = async (slackID, payload) => {
+      console.log('payload in setReminder: ', payload);
       try {
         // format date to proper JS Date object syntax
-        let date = new Date(payload[0].replace(/-/g, '/'));
+        let date = new Date(payload[1].replace(/-/g, '/'));
         // find user using slackID
         let user = await User.findOne({ slackID }).exec();
         // throw an error if user is not found
@@ -188,7 +187,7 @@ const setReminder = async (slackID, payload) => {
         // set credentials for oauth2Client connection using user's decrypted credentials
         oauth2Client.setCredentials(decryptGoogleCalAuth(user.googleCalAuth));
         // rename second parameter for readability
-        let task = payload[1];
+        let task = payload[0];
 
         return new Promise((resolve, reject) => {
           // insert event into main (primary) calendar with authentication credentials,
@@ -221,7 +220,7 @@ const setReminder = async (slackID, payload) => {
               });
               newReminder.save()
               .then((rem) => resolve({ success: true }))
-              .catch(err => reject(err));
+              .catch(err => console.log(err));
             }
           });
         })
