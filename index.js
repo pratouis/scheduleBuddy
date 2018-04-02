@@ -10,7 +10,6 @@ const { RTMClient, WebClient } = require('@slack/client');
 import { generateAuthCB, googleRoutes, getEvents, setReminder, getAvail, createMeeting } from './google';
 /* getUserInfoByID requests information about a user from SLACK API using a user's slack ID */
 import { getUserInfoByID } from './routes';
-// import axios from 'axios';
 /* setting an express server is necessary to host endpoints for
 * slack and google to send to for interactive messages and
 * permission authentication tokens, respectively */
@@ -210,10 +209,6 @@ rtm.on('message', async (event) => {
         const intent = response.result.action || response.result.metadata.intentName;
         /* if the intent of the message concerns scheduling */
         if(intent === 'meeting.add' || intent === 'reminder.add'){
-          // TODO: is this part necessary
-          // if(!user.googleCalAuth){
-          //   return handleAuth(event.user, botResponse);
-          // }
           /* check if the action is complete */
           if(!response.result.actionIncomplete) {
             /* call relevant helper functions according to intent */
@@ -342,6 +337,7 @@ app.post('/slack/actions', (req,res) => {
             *     type, and botResponse to send to user */
             handleCreateEventPromise(setReminder(user.id, parameters), 0, botResponse);
           } else {
+            /* acknowledge 'no' to confirmation */
             botResponse.text = `Okay, I won't add this to your calendar.`;
             web.chat.postMessage(botResponse);
           }
@@ -374,6 +370,7 @@ app.post('/slack/actions', (req,res) => {
             *     type, and botResponse to send to user */
             handleCreateEventPromise(createMeeting(parameters), 1, botResponse);
           } else {
+            /* acknowledge 'no' to confirmation */
             botResponse.text = `Okay, I won't add this to your calendar.`;
             web.chat.postMessage(botResponse);
           }
