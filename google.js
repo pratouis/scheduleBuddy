@@ -2,19 +2,28 @@
 * This file is for interacting with google calendar
 */
 'use strict';
-import { google } from 'googleapis';
+import { User, Reminder, Meeting, Invite } from './models/models';
+/* security.js and routes.js include helper functions related to security and
+*   pinging slack API respectively*/
+import { encryptGoogleCalAuth, decryptGoogleCalAuth } from './security';
 import { getUserInfoByID } from './routes';
 import _ from 'underscore';
-import { User, Reminder, Meeting, Invite } from './models/models';
-import { encryptGoogleCalAuth, decryptGoogleCalAuth } from './security';
+
+/* include express and router to handle authentication endpoint */
 const express = require('express');
 const router = new express.Router();
 
+/* importing google calendar dev authentication */
 const keys = require('./client_secret.json').web;
 const CLIENT_ID = keys.client_id;
 const CLIENT_SECRET = keys.client_secret;
 const REDIRECT_URL = "/oauthcb";
 
+/* create global calendar and OAuth2Client
+*   - OAuth2Client's credentials are always reset every function call
+*/
+/* used for google oauth*/
+import { google } from 'googleapis';
 const calendar = google.calendar({ version: 'v3'});
 const OAuth2Client = google.auth.OAuth2;
 const oauth2Client = new OAuth2Client(CLIENT_ID,CLIENT_SECRET, keys.redirect_uris[0]);
@@ -68,53 +77,64 @@ router.get(REDIRECT_URL, (req, res) => {
 });
 
 
+/************************************************************/
+/* GOOGLE CALENDAR API FUNCTIONS */
 
-/*
- TEMPLATE FOR HOW TO GET EVENTS
+/* getEvents - returns promise based on success of querying for events on
+*                a specified date
+*   @param slackID: ID associated with slack user who made meeting request
+*   @param startDate: day to query about events.  A real copy is passed since
+*                     we modify it using setHours
+*
+*   returns a Promise
+*       - on resolve, a list of available times between MIN_HR and MAX_HR for user to meet
+*       - on reject, an error from
 */
 const getEvents = async (slackID, startDate) => {
+    /* time range to search for events */
     const MIN_HR = 7;
     const MAX_HR = 23;
-    const daysOfTheWeek = [
-      'Sun',
-      'Mon',
-      'Tue',
-      'Wed',
-      'Thu',
-      'Fri',
-      'Sat',
-    ];
-    let user = await User.findOne({ slackID }).exec();
-    oauth2Client.setCredentials(decryptGoogleCalAuth(user.googleCalAuth));
+    try{
+      /* query for user in mongoDB using slackID */
+      let user = await User.findOne({ slackID }).exec();
+      /* set authentication using user's decrypted tokens */
+      oauth2Client.setCredentials(decryptGoogleCalAuth(user.googleCalAuth));
 
-    const month = startDate.getMonth() + 1;
-    const day = startDate.getDate();
-    // const year = startDate.getFullYear();
-    const dayOfWeek = daysOfTheWeek[startDate.getDay()];
-    // const calendar = google.calendar({version: 'v3', auth: oauth2Client})
-    return new Promise((resolve, reject) => {
-      calendar.events.list({
-        auth: oauth2Client,
-        calendarId: 'primary',
-        timeMin: new Date(startDate.setHours(MIN_HR)).toISOString(),
-        timeMax: new Date(startDate.setHours(MAX_HR)).toISOString(),
-      }, (err, data) => {
-        if (err) {
-          console.log('The API returned an error: ' + err);
-          reject(err)
-        }
-        const events = data.data.items;
-        if (events.length) {
+      return new Promise((resolve, reject) => {
+        calendar.events.list({
+          // use oauth2Client for authentication, and send object with calendarID,
+          //      time interval
+          // see query structure at https://developers.google.com/calendar/v3/reference/freebusy/query
+          auth: oauth2Client,
+          calendarId: 'primary',
+          timeMin: new Date(startDate.setHours(MIN_HR)).toISOString(),
+          timeMax: new Date(startDate.setHours(MAX_HR)).toISOString(),
+        }, (err, data) => {
+          if (err) {
+            /* reject error from calendar api */
+            console.log('The API returned an error: ' + err);
+            reject(err)
+          }
+          /* NOTE: because getAvail is called before getEvents, we know events
+          *        will always have at least one event.  If we wanted to make the
+          *        query time more efficient, we would take out freebusy query
+          *        and handle availablity within getEvents
+          */
+
+          /* parse events from data returned by google calendar API */
+          const events = data.data.items;
+          /* create an array of hours of events on startDate */
           const conflictHrs = events.map(event => new Date(event.start.dateTime).getHours());
+          /* filter out time slots from conflictHrs */
           const filteredHrs = _.range(MIN_HR,MAX_HR).filter(hr => !conflictHrs.includes(hr));
-
+          /* return array of datestrings of options */
           resolve(filteredHrs.map(hr => new Date(new Date(startDate).setHours(hr)).toLocaleString()));
-        } else {
-          console.log('No upcoming events found.');
-        }
+        })
       })
-
-    })
+    } catch(err) {
+      console.error('caught error in getEvents: ', err);
+      return new Promise((resolve, reject) => reject(err));
+    }
 }
 
 
@@ -360,7 +380,7 @@ const createMeeting = async (payload) => {
 }
 
 
-
+/* export functions and router */
 module.exports = {
   googleRoutes: router,
   generateAuthCB: generateAuthCB,
