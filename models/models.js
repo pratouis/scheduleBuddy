@@ -1,3 +1,10 @@
+/* model.js - Defining MongoDB models
+* User - associates slackID, email, name, and google permissions together
+* Meeting - associates google eventID, event info, invitee MongoDB userIDs, and host MongoDB userID
+* Reminder - associates google eventID, event info, and MongoDB userID
+* Invite - associates google eventID, invitee MongoDB userIDs, host MongoDB userID
+*/
+
 import mongoose from 'mongoose';
 import { getUserInfoByID } from '../routes';
 
@@ -22,6 +29,7 @@ const userSchema = mongoose.Schema({
   }
 });
 
+/* creates a user if there isn't one in the DB */
 userSchema.statics.findOrCreate =  function (slackID, email, name) {
   return this.findOneAndUpdate(
     { slackID },
@@ -62,10 +70,6 @@ const meetingSchema = mongoose.Schema({
     type: String,
     default: ''
   },
-  // day: {
-  //   type: Date,
-  //   required: true,
-  // },
   time: {
     start : {
       type: Date,
@@ -102,6 +106,7 @@ const inviteSchema = mongoose.Schema({
   },
   status: String
 })
+
 module.exports = {
   User: mongoose.model('User', userSchema),
   Reminder: mongoose.model('Reminder', reminderSchema),

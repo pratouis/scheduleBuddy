@@ -1,17 +1,31 @@
+/* index.js - main file of scheduler bot
+*   purpose: manage flow of dialogue from user to dialogFlow AI and generate responses
+*/
 import mongoose from 'mongoose';
 import { User } from './models/models';
+/* RTMClient is used to listen to messages from user,
+* while WebClient is used to send messages back */
 const { RTMClient, WebClient } = require('@slack/client');
+/* The following functions are defined in google.js and involve the google calendar API */
 import { generateAuthCB, googleRoutes, getEvents, setReminder, getAvail, createMeeting } from './google';
+/* getUserInfoByID requests information about a user from SLACK API using a user's slack ID */
 import { getUserInfoByID } from './routes';
-import axios from 'axios';
+// import axios from 'axios';
+/* setting an express server is necessary to host endpoints for
+* slack and google to send to for interactive messages and
+* permission authentication tokens, respectively */
 import express from 'express';
+/* request and bodyParser are used to receive and parse information from slack's endpoint */
 const request = require('request');
 const bodyParser = require('body-parser');
 const app = express();
 app.use(bodyParser.urlencoded({ extended: false }));
+/* this middleware includes the endpoint for oauth from google */
 app.use('/', googleRoutes);
+
+/* NPM package used to include google's dialogFlow */
 import apiai from 'apiai';
-var test = apiai(process.env.APIAI_CLIENT_TOKEN);
+var buddyAI = apiai(process.env.APIAI_CLIENT_TOKEN);
 
 
 if (!process.env.MONGODB_URI) {
@@ -22,19 +36,14 @@ if (!process.env.MONGODB_URI) {
 mongoose.connect(process.env.MONGODB_URI);
 
 
-
-/* RTM API to be used to respond to messages
-*/
+/* RTM API to be used to receivemessages */
 const rtm = new RTMClient(process.env.BOT_SLACK_TOKEN);
+// start event listener
 rtm.start();
-/*
-* Web API to be used to parse through messages ?
-*/
+/* Web API to be used to send messages (both interactive and static) */
 const web = new WebClient(process.env.BOT_SLACK_TOKEN);
 
-/* WEBHOOK needed to communicate with slack server and slack server to our app */
-const currentTime = new Date().toTimeString();
-
+/* specifying styling to be used with JS Date object and toLocaleDateString function */
 const dateStyles = {
   weekday: 'short',
   month: 'long',
@@ -44,341 +53,254 @@ const dateStyles = {
   year: 'numeric',
 };
 
+/* specifying default response message of bot
+*   setting subtype as bot_message allows us to filter out bot's messages as
+*   the RTM receives them.
+*   setting reply_broadcast to true allows for bot to communicate within an APP
+*   and only send messages to user who initialized dialogue (as opposed to all users using app)
+*/
 const defaultResponse = {
   reply_broadcast: true,
   subtype: 'bot_message',
   as_user: true,
 }
 
+/* handleAuth - sends message to user asking for permission
+*   @param slackID: ID associated with each slack user, to be used in oauth CB
+*   @param botResponse: copy of defaultResponse with channel specifed
+*   helper functions: generateAuthCB - creating oauth link with slackID
+*
+*   outcome: a message to user with a link to permissions
+*/
+const handleAuth = (slackID, botResponse) => {
+  botResponse.text = `I need your permission to access google calendar: ${generateAuthCB(slackID)}`;
+  web.chat.postMessage(botResponse);
+}
+
+/* handleMeeting - sends an interactive message to user, either asking for
+*                   confirmation or to resolve a time conflict
+*   @param user: mongodb model holding email, google authentication, slackID, etc.
+*   @param response: object returned from dialogFLow API as a result of a
+*                      request to API using user's input
+*   @param botResponse: copy of defaultResponse with channel specifed
+*   helper functions:
+*     getAvail - queries google calendar API for user's availability
+*     getEvents - queries google calendar API for user's availability on startDate
+*     generateInteractiveMessage - creates array of object which will be used by slack to create interactive message
+*
+*   outcome: an interactive message with a confirmation message or a selection
+*             menu based on whether there is a time conflict
+*/
+const handleMeeting = async (user, response, botResponse) => {
+  try {
+    /* destructure information that dialogFlow parsed and placed in result.parameters */
+    let { invitees, day, time, subject, location } = response.result.parameters;
+    /* format date as acceptable for en-US JS Date object specificatiosn */
+    let startDate = new Date(day.replace(/-/g, '/'));
+    /* set time of startDate by parsing clock time hh:mm:ss and
+    *     setting hours, minutes, seconds manually */
+    let times = time.split(':');
+    startDate.setHours(times[0]);
+    startDate.setMinutes(times[1]);
+    startDate.setSeconds(times[2]);
+    /* create an endDate one hour after startDate (default) */
+    let endDate = new Date(new Date(startDate).setHours(startDate.getHours()+1));
+    /* check for availability on current user's (host of meeting) calendar */
+    let availability = await getAvail(user, startDate, endDate);
+    /* map slackIDs from the invitees
+    * this logic was necessary since dialogFlow was
+    *   a) unable to distinguish multiple users after an '@' symbol
+    *   b) still includes other characters such as '<',',', and any words in between or after
+    */
+    let slackIDs = response.result.parameters.invitees
+      .map((invitee) => invitee.split('@').map(user => {
+        if(user.length > 8){ return user.slice(0,9) }
+      })
+      .filter((thing) => !!thing))
+      .reduce((acc, x) => acc.concat(x), []);
+    /*  set botResponse to in_channel to indicate where interactive message is */
+    botResponse.response_type = "in_channel";
+    /* if the user is not free during the time specified to dialogFlow */
+    if(!availability){
+      /* get a list of available times the same time between 7 AM and 11 PM */
+      let myEvents = await getEvents(user.slackID, new Date(startDate));
+      /* create valid interactive message options objects in an array*/
+      myEvents = myEvents.map((date) => ({ text: date, value: date }));
+      /* set the botResponse text to indicate a time conflcit */
+      botResponse.text = "Time Conflicts";
+      /* create a selection menu interactive message
+      *   list of invitees must be in string form and specified using slack user mention syntax (<@[slackID]>)
+      *   conflcit is specified with boolean, true
+      *   myEvents represents available times for user to meet
+      */
+      botResponse.attachments = generateInteractiveMessage(slackIDs.map(slackID => `<@${slackID}>`).join(', '), startDate, endDate, "Meeting", response, true, myEvents);
+    } else {
+      /* set botResponse to indicate asking for Meeting Confirmation */
+      botResponse.text = "Meeting Confirmation";
+      /* create a confirm-cancel interactive message
+      *   since there are no conflicts, the response and conflict fields do not need to be specified
+      *   see generateInteractiveMessage definition for more details
+      */
+      botResponse.attachments = generateInteractiveMessage(slackIDs.map(slackID => `<@${slackID}>`).join(', '), startDate, endDate, "Meeting");
+    }
+    /* send message to user in bot app */
+    web.chat.postMessage(botResponse);
+  } catch (error) {
+    /* catch any errors from querying google API*/
+    console.error('error in handling meeting.add intent: ', error);
+  }
+}
+
+/* handleMeeting - sends an interactive message to user, asking to confirm adding reminder
+*   @param response: object returned from dialogFLow API as a result of a
+*                      request to API using user's input
+*   @param botResponse: copy of defaultResponse with channel specifed
+*   helper functions:
+*     generateInteractiveMessage - creates array of object which will be used by slack to create interactive message
+*
+*   outcome: interactive confirmation message sent to user
+*/
+const handleReminder = (response, botResponse) => {
+  /* set title text to Reminder */
+  botResponse.text = "Reminder Confirmation";
+  /* generateInteractiveMessage will need the response from AI API to specify date and subject */
+  botResponse.attachments = generateInteractiveMessage(null, null, null, "Reminder", response, false);
+  /* send message to user in bot app */
+  web.chat.postMessage(botResponse);
+}
+
+
+/*  RTM eventListener - listens for events of type 'message'
+*   receives event from slackID
+*     for structure of `event`, see https://api.slack.com/events/reaction_added
+*   helper functions:
+*       getUserInfoByID - if a user does not exist initialize the user
+*       handleAuth - ask for user's permission to edit google calendar if it is not granted
+*       handleReminder - called if the intent of a user's message is of type 'reminder.add'
+*       handleMeeting - called if the intent of a user's message is of type 'meeting.add'
+*
+*       outcome: if a helper function is not called first,
+*                 send default text from dialogFlow's AI
+*/
 rtm.on('message', async (event) => {
-  // For structure of `event`, see https://api.slack.com/events/reaction_added
+  /* a subtype of a message is only specified for internal messages or messages sent by bots
+  *   also ignore any message with a bot_id as it is not from a user
+  */
   if(event.subtype || event.bot_id) { return; }
   try {
+    /* try to find a user in bot's backend mongoDB */
     let user = await User.findOne({ slackID: event.user });
-    if(!user){
-      console.log('user not found!');
+    /* initialize bot's response with defaultResponse and channel as specified by event */
+    let botResponse = Object.assign({}, defaultResponse, {channel: event.channel});
+    if(!user){ /* if a user is not found, create one with their slackID, email, name  */
       const user_info = await getUserInfoByID(event.user);
       user = await User.findOrCreate(event.user, user_info.email, user_info.name);
     }
-
-
-    let botResponse = Object.assign({}, defaultResponse, {channel: event.channel});
-    const request = test.textRequest(event.text, {
+    /* if user has not granted permission, send a message asking for it */
+    if(!user.googleCalAuth) {
+      return handleAuth(event.user, botResponse);
+    }
+    /* create request to dialogFlow AI using text from event */
+    const request = buddyAI.textRequest(event.text, {
       sessionId: event.user
     });
-
+    /* event listener on event type 'response' from dialogFlow */
     request.on('response', async function(response) {
-        // console.log('response.result: ', response.result);
-        if(response.result.metadata.intentName === 'meeting.add' || response.result.action === 'reminder.add'){
-          if(!user.googleCalAuth)
-          {
-            console.error('not authorized?!!');
-            botResponse.text = `I need your permission to access google calendar: ${generateAuthCB(event.user)}`;
-            rtm.addOutgoingEvent(false, 'message', botResponse);
-            return;
-          }
-
-          // console.log('what to send back: ', response.result.fulfillment.speech);
-          // console.log('currently recorded params: ', response.result.parameters);
-          // console.log('this conversation is not yet complete: ', response.result.actionIncomplete);
-
+        /* parse intent as action or intentName (different depending on intent)*/
+        const intent = response.result.action || response.result.metadata.intentName;
+        /* if the intent of the message concerns scheduling */
+        if(intent === 'meeting.add' || intent === 'reminder.add'){
+          // TODO: is this part necessary
+          // if(!user.googleCalAuth){
+          //   return handleAuth(event.user, botResponse);
+          // }
+          /* check if the action is complete */
           if(!response.result.actionIncomplete) {
-            if(response.result.metadata.intentName === 'meeting.add') {
-              // console.log('meeting to use this info: ', response.result);
-
-              let { invitees, day, time, subject, location } = response.result.parameters;
-              let startDate = new Date(day.replace(/-/g, '/'));
-              let times = time.split(':');
-              startDate.setHours(times[0]);
-              startDate.setMinutes(times[1]);
-              startDate.setSeconds(times[2]);
-              let endDate = new Date(new Date(startDate).setHours(startDate.getHours()+1));
-              let availability = null;
-              try {
-                availability = await getAvail(user, startDate, endDate);
-                console.log('availablity: ', availability)
-              } catch (err){
-                console.error(err);
-                return;
-              }
-              // TODO: make this an options menu
-              // let message = Object.assign({},defaultResponse,);
-              let slackIDs = response.result.parameters.invitees
-                .map((invitee) => invitee.split('@').map(user => {
-                  if(user.length > 8){
-                    return user.slice(0,9)
-                  }
-                })
-                .filter((thing) => !!thing))
-                .reduce((acc, x) => acc.concat(x), []);
-
-              if(!availability){
-                let myEvents = await getEvents(event.user, new Date(startDate));
-                myEvents = myEvents.map((date) => {
-                  return { text: date, value: date }
-                });
-                botResponse.response_type = "in_channel";
-                console.log(slackIDs);
-              // let userIDs = [];
-              // let names = [];
-              // let emails = await Promise.all(slackIDs.map( async (slackID, index) => {
-              //   // slackID = slackID.replace(/[\@\<\>]/g,'');
-              //   let _user = await User.findOne({ slackID }).exec();
-              //   if(!_user){
-              //     const user_info = await getUserInfoByID(slackID);
-              //     _user = await User.findOrCreate(slackID, user_info.email, user_info.name);
-              //   }
-              //   names.push(_user.name);
-              //   userIDs.push(_user._id);
-              //   // title += index === invitees.length ? `and ${_user.name}` : `${_user.name}, `;
-              //   return { email: _user.email };
-              // }));
-              // console.log(names, userIDs, emails);
-                botResponse.attachments = [
-                  {
-                    "title": "Time Conflicts",
-                    "fields": [
-                      {
-                        "title": "With Whom",
-                        "value": slackIDs.map(slackID => `<@${slackID}>`).join(', '),
-                        // "value": { emails, userIDs }
-                      },
-                      {
-                        "title": "Proposed Time",
-                        "value": `${startDate.toLocaleDateString("en-US", dateStyles)}-${endDate.toLocaleDateString("en-US", dateStyles)}`,
-                        // "value" : { startDate, endDate }
-                      }
-                    ]
-                  },
-                  {
-                    "text": "Choose a time that conflicts",
-                    "color": "#3AA3E3",
-                    "attachment_type": "default",
-                    "fallback": "That time conflicts, here are other options: ",
-                    // "titled": "That time conflicts, here are other options: ",
-                    "callback_id": "timeConflictsChoice",
-                    "color": "#3AA3E3",
-                    "attachment_type": "default",
-                    "actions": [{
-                      "name": "pick_meeting_time",
-                      "text": "Pick a time...",
-                      "type": "select",
-                      "options": myEvents
-                    }]
-                  }
-                ]
-              } else {
-                console.log('available: sending Meeting Confirmation');
-                botResponse.attachments = generateMeetingConfirmation(slackIDs.map(slackID => `<@${slackID}>`).join(', '), startDate, endDate);
-              }
-              web.chat.postMessage(botResponse);
-              return;
-
-              // } else {
-              //   console.log('would create meeting here');
-              //   // createMeeting(user, response.result.parameters);
-              // }
-              /*
-              TODO : decide on flow of info
-              - check availability - then
-              */
+            /* call relevant helper functions according to intent */
+            if(intent === 'meeting.add') {
+              return handleMeeting(user, response, botResponse);
             }
-
-            //Add a google calendar event with [date, subject] -> as params
-            if (response.result.action === 'reminder.add') {
-              console.log('inside reminder.add');
-              /*let confirm = {
-                "text": "Scheduling Confirmation",
-                "attachments": [
-                  {
-                    "title": "${name of the event}",
-                    "pretext": "can this work?",
-                    "fields": [
-                      {
-                        "title": "Date",
-                        "value": "{date}",
-                        "short": true
-                      },
-                      {
-                        "title": "Time",
-                        "value": "{time}",
-                        "short": true
-                      },
-                      {
-                        "title": "With",
-                        "value": "{people}",
-                        "short": true
-                      }
-                    ]
-                  },
-                  {
-                    "title": "Hey!",
-                    "text": "I have created your event!"
-                  },
-                  {
-                    "fallback": "Are you sure you want me to add this to your calendar?",
-                    "title": "Are you sure you want me to add this to your calendar?",
-                    "callback_id": "comic_1234_xyz",
-                    "color": "#3AA3E3",
-                    "attachment_type": "default",
-                    "actions": [
-                      {
-                        "name": "yes",
-                        "text": "Yes",
-                        "type": "button",
-                        "value": "confirm"
-                      },
-                      {
-                        "name": "no",
-                        "text": "No",
-                        "type": "button",
-                        "value": "no"
-                      }
-                    ]
-                  }
-                ]
-              };
-
-              const resp = Object.assign({}, confirm, {channel: event.channel});
-              console.log(botResponse);
-              */
-              // setReminder(event.user, response.result.parameters.subject, response.result.parameters.date.replace(/-/g, '/'));
-              botResponse.text = "Scheduling Confirmation";
-              botResponse.attachments = [
-                {
-                  "title": `Reminder`,
-                  "fields": [
-                    {
-                      "title": "Date",
-                      "value": `${response.result.parameters.date}`,
-                    },
-                    {
-                      "title": "What",
-                      "value": `${response.result.parameters.subject}`
-                    }
-                  ]
-                },
-                {
-                  "fallback": "Are you sure you want me to add this to your calendar?",
-                  "title": "Are you sure you want me to add this to your calendar?",
-                  "callback_id": "reminderConfirm",
-                  "color": "#3AA3E3",
-                  "attachment_type": "default",
-                  "actions": [
-                    {
-                      "name": "confirm",
-                      "text": "*confirm*",
-                      "type": "button",
-                      "value": "confirm",
-                      "mrkdwn": true,
-                    },
-                    {
-                      "name": "no",
-                      "text": "no",
-                      "type": "button",
-                      "value": "no"
-                    }
-                  ]
-                }
-              ];
-              /*
-              {
-              "channel": event.channel,
-              "subtype": 'bot_message',
-              "as_user" : true,
-              "text": "Scheduling Confirmation",
-              "attachments": [
-                {
-                  "title": `Reminder`,
-                  "fields": [
-                    {
-                      "title": "Date",
-                      "value": `${response.result.parameters.date}`,
-                    },
-                    {
-                      "title": "What",
-                      "value": `${response.result.parameters.subject}`
-                    }
-                  ]
-                },
-                {
-                  "fallback": "Are you sure you want me to add this to your calendar?",
-                  "title": "Are you sure you want me to add this to your calendar?",
-                  "callback_id": "reminderConfirm",
-                  "color": "#3AA3E3",
-                  "attachment_type": "default",
-                  "actions": [
-                    {
-                      "name": "confirm",
-                      "text": "*confirm*",
-                      "type": "button",
-                      "value": "confirm",
-                      "mrkdwn": true,
-                    },
-                    {
-                      "name": "no",
-                      "text": "no",
-                      "type": "button",
-                      "value": "no"
-                    }
-                  ]
-                }
-              ]
+            if (intent === 'reminder.add') {
+              return handleReminder(response, botResponse);
             }
-              */
-              web.chat.postMessage(botResponse);
-              return;
-            }
-          } else {
-            botResponse.text = response.result.fulfillment.speech;
           }
-        } else {
-          botResponse.text = response.result.fulfillment.speech;
         }
-        // botResponse.thread_ts = event.ts;
-        // console.log('time checkin: ', event);
-
-        console.log("buddy's response: ", botResponse);
-        console.log("type: ", response.result.metadata.intentName);
-        rtm.addOutgoingEvent(response.result.actionIncomplete, 'message', botResponse);
-
+        /* set bot's response text to that returned by buddyAI, when:
+        *   - response is incomplete
+        *   - request has another intent i.e. 'hello'
+        */
+        botResponse.text = response.result.fulfillment.speech;
+        /* send out message to user on app channel */
+        web.chat.postMessage(botResponse);
       })
 
-
+      // handle error from dialogFlow
       request.on('error', function (error) {
-        // console.log(error);
-      });
-
+        console.error('error from dialogFlow: ', error);
+        return;
+      })
+      // terminate request from dialogFlow
       request.end();
   } catch (err) {
-    console.log('caught error in rtm.on(message)');
-    console.error(err);
+    /* catch any errors from using mongoDB */
+    console.error('caught error in rtm.on(message)', err);
   }
 });
 
-// TODO helper function that generates meeting message
-const generateMeetingConfirmation = (users, startDate, endDate) => {
+
+/*  generateInteractiveMessage - helper function creating interactive message
+*   @param invitees: specifies those invited (if intent is meeting.add) in form of a string joined by comma-space
+*   @param startDate: date object specifying start datetime or date
+*   @param endDate: date object specifying end datetime or date
+*   @param eventType: 'Meeting' or 'Reminder'
+*   @param response: dialogFlow's response from user's text
+*   @param conflict: boolean of user's availability
+*
+*   returns: array suitable for slack message attachments field
+*/
+const generateInteractiveMessage = (invitees, startDate, endDate, eventType, response, conflict, evs) => {
+  /* check if user is attempting to schedule a meeting within 4 hours*/
+  if(startDate-(1000*60*60*4) < new Date() && eventType == "Meeting") {
+    return [{
+      "title": "You cannot schedule less than 4 hours ahead."
+    }];
+  }
   return [
     {
-      "title": `Meeting Confirmation`,
       "fields": [
+        // if event is of type reminder, specify what the reminder is for
+        eventType === "Reminder" ?
         {
-          "title": "With Whom",
-          "value": users
+          "title": "What",
+          "value": `${response.result.parameters.subject}`
+        } : {
+        // else specify invitees to meeting
+            "title": "With Whom",
+            "value": invitees
         },
+        /* always specify the date, either as a day, or as a datetime string,
+            using dateStyles object for formatting  */
         {
           "title": "Date",
-          "value": `${startDate.toLocaleDateString("en-US", dateStyles)}-${endDate.toLocaleDateString("en-US", dateStyles)}`,
-        }
+          "value": eventType==="Reminder" ? `${response.result.parameters.date}`:
+          `${startDate.toLocaleDateString("en-US", dateStyles)}-${endDate.toLocaleDateString("en-US", dateStyles)}`,
+        },
       ]
     },
+    /* create a message based on whether there is a conflict or not */
     {
-      "fallback": "Are you sure you want me to add this to your calendar?",
-      "title": "Are you sure you want me to add this to your calendar?",
-      "callback_id": "meetingConfirm",
+      "fallback": conflict ? "That time conflicts, here are other options: ":"Are you sure you want me to add this to your calendar?",
+      "title": conflict ? "Choose a time that does not conflict" : "Are you sure you want me to add this to your calendar?",
+      "callback_id": conflict ? "timeConflictsChoice": `${eventType.toLowerCase()}Confirm`,
       "color": "#3AA3E3",
       "attachment_type": "default",
-      "actions": [
+
+      "actions": conflict ? [{
+        "name": "pick_meeting_time",
+        "text": "Pick a time...",
+        "type": "select",
+        "options": evs
+      }] :[
         {
           "name": "confirm",
           "text": "*confirm*",
@@ -397,40 +319,47 @@ const generateMeetingConfirmation = (users, startDate, endDate) => {
   ];
 }
 
+/* endpoint for slack to post to upon a user's interaction with interactive message
+* helperFunction:
+*   handleCreateEventPromise - since google calendar functions return promises,
+*       so this function specifies whether to return a success or error message
+*/
 app.post('/slack/actions', (req,res) => {
-    res.status(200).end();
-    const { callback_id, actions, user, channel, original_message } = JSON.parse(req.body.payload);
-    // console.log('actions: ',actions[0].selected_options);
-    // console.log('callback_id: ', callback_id)
-
-    let botResponse = {channel: channel.id, subtype: 'bot_message', as_user: true}
-    if(callback_id === 'timeConflictsChoice') {
-      console.log(callback_id)
-    }
-    console.log('callback_id: ', callback_id, typeof callback_id)
-    switch(callback_id){
+  /* apparently polite for us to send an acknowledgment in the form of a 200 status */
+  res.status(200).end();
+  /* destructure payload received from slack's API */
+  const { callback_id, actions, user, channel, original_message } = JSON.parse(req.body.payload);
+  /* create botResponse template specifying channel and using defaultResponse as backbone */
+  let botResponse = Object.assign({}, defaultResponse, {channel: channel.id});
+  /* switch based on whether */
+  switch(callback_id) {
       case "reminderConfirm":
+          /* if the user hits confirm, create reminder */
           if(actions[0].name === "confirm") {
+            /* get date and subject of reminder from archive of original_message sent by slack API*/
             let parameters = original_message.attachments[0].fields.map(obj => obj.value);
+            /* pass in promise to create reminder, 0 to specify a reminder event
+            *     type, and botResponse to send to user */
             handleCreateEventPromise(setReminder(user.id, parameters), 0, botResponse);
+          } else {
+            botResponse.text = `Okay, I won't add this to your calendar.`;
+            web.chat.postMessage(botResponse);
           }
           return;
       case "timeConflictsChoice":
-          console.log('inside timeConflictsChoice');
-          const users = original_message.attachments[0].fields[0].value;
-          console.log('selected_options keys: ',Object.keys(actions[0].selected_options[0]));
-          console.log('actions: ',actions[0]);
-          // console.log(Object.keys(actions[0]));
+          /* grab invitees, newly specifed startDate from archived original_message sent by slack API */
+          const invitees = original_message.attachments[0].fields[0].value;
           const startDate = new Date(actions[0].selected_options[0].value);
-          console.log(typeof startDate);
-          console.log(startDate.toLocaleDateString('en-US', dateStyles));
+          /* create new endDate from specified startDate */
           const endDate = new Date(new Date(startDate).setHours(startDate.getHours() + 1));
-          botResponse.attachments = generateMeetingConfirmation(users, startDate, endDate);
-          console.log('about to post pack');
-          web.chat.postMessage(botResponse);
-          return;
+          /* create meeting confirmation interactive message including invitees, startDate, endDate */
+          botResponse.attachments = generateInteractiveMessage(invitees, startDate, endDate, "Meeting");
+          /* end with sending message to user through app channel */
+          return web.chat.postMessage(botResponse);
       case "meetingConfirm":
+          /* if the user hits confirm, create reminder */
           if(actions[0].name === "confirm") {
+            /* set parameters as object specifying slackID, invitees, startDate, endDate */
             let parameters = { slackID : user.id };
             original_message.attachments[0].fields.forEach((obj) => {
               if(obj.title.indexOf('Whom') > -1){
@@ -441,13 +370,27 @@ app.post('/slack/actions', (req,res) => {
                 parameters.endDate = dates[1];
               }
             });
-            // console.log('meeting Confirm parameters: ',parameters);
+            /* pass in promise to create reminder, 1 to specify a meeting event
+            *     type, and botResponse to send to user */
             handleCreateEventPromise(createMeeting(parameters), 1, botResponse);
+          } else {
+            botResponse.text = `Okay, I won't add this to your calendar.`;
+            web.chat.postMessage(botResponse);
           }
           return;
     }
 })
 
+/* handleCreateEventPromise - helper function to generateInteractiveMessage
+*   @param promise - event promise returned from ./google indicating whether
+*                   events (reminders or meetings) were successfully added to
+*                   mongoDB and google calendar
+*   @param type - number treated as boolean, indicating whether  promise is
+*                 for a meeting or reminder
+*   @param botResponse: copy of defaultResponse with channel specifed
+*
+*   outcome: send message to user through app channel
+*/
 const handleCreateEventPromise = (promise, type, botResponse) => {
   promise.then(() => {
     botResponse.text = "I\'ve successfully updated your calendar";
@@ -459,6 +402,6 @@ const handleCreateEventPromise = (promise, type, botResponse) => {
   })
 }
 /*
-* listen here
+* listen to requests here
 */
 app.listen(3000);
