@@ -321,7 +321,7 @@ const generateInteractiveMessage = (invitees, startDate, endDate, eventType, res
 
 /* endpoint for slack to post to upon a user's interaction with interactive message
 * helperFunction:
-*   handleCreateEventPromise - sicne google calendar functions return promises,
+*   handleCreateEventPromise - since google calendar functions return promises,
 *       so this function specifies whether to return a success or error message
 */
 app.post('/slack/actions', (req,res) => {
@@ -341,6 +341,9 @@ app.post('/slack/actions', (req,res) => {
             /* pass in promise to create reminder, 0 to specify a reminder event
             *     type, and botResponse to send to user */
             handleCreateEventPromise(setReminder(user.id, parameters), 0, botResponse);
+          } else {
+            botResponse.text = `Okay, I won't add this to your calendar.`;
+            web.chat.postMessage(botResponse);
           }
           return;
       case "timeConflictsChoice":
@@ -370,6 +373,9 @@ app.post('/slack/actions', (req,res) => {
             /* pass in promise to create reminder, 1 to specify a meeting event
             *     type, and botResponse to send to user */
             handleCreateEventPromise(createMeeting(parameters), 1, botResponse);
+          } else {
+            botResponse.text = `Okay, I won't add this to your calendar.`;
+            web.chat.postMessage(botResponse);
           }
           return;
     }
@@ -396,6 +402,6 @@ const handleCreateEventPromise = (promise, type, botResponse) => {
   })
 }
 /*
-* listen to requests here 
+* listen to requests here
 */
 app.listen(3000);
