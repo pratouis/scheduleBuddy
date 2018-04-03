@@ -64,7 +64,7 @@ const defaultResponse = {
   as_user: true,
 }
 
-/* handleAuth - sends message to user asking for permission
+/** handleAuth - sends message to user asking for permission
 *   @param slackID: ID associated with each slack user, to be used in oauth CB
 *   @param botResponse: copy of defaultResponse with channel specifed
 *   helper functions: generateAuthCB - creating oauth link with slackID
@@ -76,7 +76,7 @@ const handleAuth = (slackID, botResponse) => {
   web.chat.postMessage(botResponse);
 }
 
-/* handleMeeting - sends an interactive message to user, either asking for
+/** handleMeeting - sends an interactive message to user, either asking for
 *                   confirmation or to resolve a time conflict
 *   @param user: mongodb model holding email, google authentication, slackID, etc.
 *   @param response: object returned from dialogFLow API as a result of a
@@ -150,7 +150,7 @@ const handleMeeting = async (user, response, botResponse) => {
   }
 }
 
-/* handleMeeting - sends an interactive message to user, asking to confirm adding reminder
+/** handleMeeting - sends an interactive message to user, asking to confirm adding reminder
 *   @param response: object returned from dialogFLow API as a result of a
 *                      request to API using user's input
 *   @param botResponse: copy of defaultResponse with channel specifed
@@ -169,7 +169,7 @@ const handleReminder = (response, botResponse) => {
 }
 
 
-/*  RTM eventListener - listens for events of type 'message'
+/**  RTM eventListener - listens for events of type 'message'
 *   receives event from slackID
 *     for structure of `event`, see https://api.slack.com/events/reaction_added
 *   helper functions:
@@ -243,7 +243,7 @@ rtm.on('message', async (event) => {
 });
 
 
-/*  generateInteractiveMessage - helper function creating interactive message
+/**  generateInteractiveMessage - helper function creating interactive message
 *   @param invitees: specifies those invited (if intent is meeting.add) in form of a string joined by comma-space
 *   @param startDate: date object specifying start datetime or date
 *   @param endDate: date object specifying end datetime or date
@@ -314,7 +314,7 @@ const generateInteractiveMessage = (invitees, startDate, endDate, eventType, res
   ];
 }
 
-/* endpoint for slack to post to upon a user's interaction with interactive message
+/** endpoint for slack to post to upon a user's interaction with interactive message
 * helperFunction:
 *   handleCreateEventPromise - since google calendar functions return promises,
 *       so this function specifies whether to return a success or error message
@@ -378,7 +378,7 @@ app.post('/slack/actions', (req,res) => {
     }
 })
 
-/* handleCreateEventPromise - helper function to generateInteractiveMessage
+/** handleCreateEventPromise - helper function to generateInteractiveMessage
 *   @param promise - event promise returned from ./google indicating whether
 *                   events (reminders or meetings) were successfully added to
 *                   mongoDB and google calendar
