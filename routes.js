@@ -3,7 +3,7 @@
 */
 import axios from 'axios';
 
-/* getUserInfoByID - queries slack web API with the method 'users.info' using
+/** getUserInfoByID - queries slack web API with the method 'users.info' using
 *                     slack authentication to get user's email and name
 *   @param userID: slackID associated with slack user
 *   return outcome of promise

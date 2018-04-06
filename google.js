@@ -80,7 +80,7 @@ router.get(REDIRECT_URL, (req, res) => {
 /************************************************************/
 /* GOOGLE CALENDAR API FUNCTIONS */
 
-/* getEvents - returns promise based on success of querying for events on
+/** getEvents - returns promise based on success of querying for events on
 *                a specified date
 *   @param slackID: ID associated with slack user who made meeting request
 *   @param startDate: day to query about events.  A real copy is passed since
@@ -138,7 +138,7 @@ const getEvents = async (slackID, startDate) => {
 }
 
 
-/* getAvail - returns promise based on whether user has conflicts with datetime
+/** getAvail - returns promise based on whether user has conflicts with datetime
 *     @param user - mongoDB user object
 *     @param startDate - start of event
 *     @param endDate - end of event
@@ -182,9 +182,9 @@ const getAvail = (user, startDate, endDate) => {
   });
 }
 
-/* setReminder - creates reminder on google calendar and in mongoDB
-*   @params slackID - ID associated with slack user who is creating reminder
-*   @params payload - parameters returned from dialogFlow
+/** setReminder - creates reminder on google calendar and in mongoDB
+*   @param slackID - ID associated with slack user who is creating reminder
+*   @param payload - parameters returned from dialogFlow
 *
 *   returns Promise
 *     - rejects with err if
@@ -259,8 +259,8 @@ const createInvite = (inviteeID, eventID, hostID) => {
 }
 
 
-/*  createMeeting - creates a meeting on google calendar and in mongoDB
-*   @params payload - object passed from interactive message including meeting details
+/**  createMeeting - creates a meeting on google calendar and in mongoDB
+*   @param payload - object passed from interactive message including meeting details
 *
 *   returns promise
 *       - rejects with error if
