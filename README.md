@@ -4,6 +4,17 @@
 We created a bot user through a combination of Slack's API and Google's dialogFlow that is able to understand user's requests to create reminders and meetings, as well as banter.  The bot asks a user to grant access (read and write) to their google calendar, under the assumption that the user joined the slack workspace with a google account.  
 
 ---
+## What does it do? 
+
+#### Reminders 
+![Reminder](./example_gifs/reminder.gif)
+
+#### Meeting Confirmation
+![Meeting Confirmation](./example_gifs/confirmation.gif)
+
+#### Invite multiple people, who can manage invitations via Google Calendar
+![Multiple Invitees](./example_gifs/multiple_meeting_and_calendar.gif)
+---
 ## What APIs 
 
 #### [Slack API](https://api.slack.com/)
@@ -28,7 +39,6 @@ Through repeated sentences and phrases, our team trained a dialogFlow for adding
 
 #### [Google Calendar API](https://developers.google.com/calendar/overview)
 Using the npm package [googleapis](https://www.npmjs.com/package/googleapis) to handle oauth requests and credentials, we were able to insert and get events with limited pinging of Google's Calendar API.   
-
 ---
 ## What were some challenges?
 + Coordinating between all of Slack's APIs and keeping requests to Google Calendar low.  
