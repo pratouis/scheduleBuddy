@@ -37,11 +37,27 @@ In order to ask for user's confirmation of a reminder or meeting, or to resolve 
 #### [dialogFlow](https://dialogflow.com/)
 Through repeated sentences and phrases, our team trained a dialogFlow for adding reminders and adding meetings, detecting slack users with slack ID syntax `<@U123456>`.
 
-#### [Google Calendar API](https://developers.google.com/calendar/overview)
-Using the npm package [googleapis](https://www.npmjs.com/package/googleapis) to handle oauth requests and credentials, we were able to insert and get events with limited pinging of Google's Calendar API.   
+#### [Google Calendar API](https://developers.google.com/calendar/overview) 
+Using the npm package [googleapis](https://www.npmjs.com/package/googleapis) to handle oauth requests and credentials, we were able to insert and get events with limited pinging of Google's Calendar API
+
+---
+#### How to run locally 
+1. Spin up ngrok
+```
+ngrok http 3000
+```
++ port number specific to whatever port express app is running on
+2. Change Google certificate, both online and in JSON
++ enable googel calendar on google console
++ create a web oauth credentials on google console 
++ copy ngrok URL into "Authorized redirect URIs" with '/oauthcb' at the end
++ download client-secret into project directory
+3. Change Slack webhook
++ update "Request URL" under "Interactive Components" with '/slack/actions' at the end 
 ---
 ## What were some challenges?
 + Coordinating between all of Slack's APIs and keeping requests to Google Calendar low.  
++ encrypting tokens sent by google to our backend 
 
 ## What's left to-do? 
 + deploy to heroku - currently using ngrok 
